@@ -1,2 +1,2 @@
 # graphql
-GraphQL server - implements both query and type definitions
+GraphQL server - executes Graph Query Language
