@@ -21,8 +21,9 @@ const (
 	FLOAT     = "Float"  // 3.42
 	STRING    = "String" // contents between " or """
 	RAWSTRING = "Raw"
-	LIST      = "LIST"
-	BOOL      = "Boolean"
+	LIST      = "List"
+	BOOLEAN   = "Boolean"
+	OBJECT    = "Object"
 
 	// Category
 	VALUE    = "VALUE"
@@ -43,6 +44,7 @@ const (
 	COMMENT    = "#"
 	UNDERSSCRE = "_"
 	DOLLAR     = "$"
+	ATSIGN     = "@"
 
 	LPAREN   = "("
 	RPAREN   = ")"
@@ -79,32 +81,38 @@ type Pos struct {
 
 // Token is exposed via token package so lexer can create new instanes of this type as required.
 type Token struct {
-	Cat      TokenCat
-	Type     TokenType
-	Literal  string // string value of token - rune, string, int, float, bool
-	Position Pos    // start position of token
-	Illegal  bool
+	Cat          TokenCat
+	Type         TokenType
+	IsScalarType bool
+	Literal      string // string value of token - rune, string, int, float, bool
+	Loc          Pos    // start location (line,col) of token
+	Illegal      bool
 }
 
 var keywords = map[string]struct {
-	Type TokenType
-	Cat  TokenCat
+	Type         TokenType
+	Cat          TokenCat
+	IsScalarType bool
 }{
-	"query":        {QUERY, NONVALUE},
-	"mutation":     {MUTATION, NONVALUE},
-	"subscription": {SUBSCRIPTION, NONVALUE},
-	"enum":         {ENUM, NONVALUE},
-	"fragment":     {FRAGMENT, NONVALUE},
-	"on":           {ON, NONVALUE},
-	"type":         {TYPE, NONVALUE},
-	"null":         {NULL, VALUE},
-	"true":         {TRUE, VALUE},
-	"false":        {FALSE, VALUE},
+	"Int":          {INT, NONVALUE, true},
+	"Float":        {FLOAT, NONVALUE, true},
+	"String":       {STRING, NONVALUE, true},
+	"Boolean":      {BOOLEAN, NONVALUE, true},
+	"query":        {QUERY, NONVALUE, false},
+	"mutation":     {MUTATION, NONVALUE, false},
+	"subscription": {SUBSCRIPTION, NONVALUE, false},
+	"fragment":     {FRAGMENT, NONVALUE, false},
+	"enum":         {ENUM, NONVALUE, false},
+	"on":           {ON, NONVALUE, false},
+	"type":         {TYPE, NONVALUE, false},
+	"null":         {NULL, VALUE, false},
+	"true":         {TRUE, VALUE, false},
+	"false":        {FALSE, VALUE, false},
 }
 
-func LookupIdent(ident string) (TokenType, TokenCat) {
+func LookupIdent(ident string) (TokenType, TokenCat, bool) {
 	if tok, ok := keywords[ident]; ok {
-		return tok.Type, tok.Cat
+		return tok.Type, tok.Cat, tok.IsScalarType
 	}
-	return IDENT, NONVALUE
+	return IDENT, NONVALUE, false
 }
