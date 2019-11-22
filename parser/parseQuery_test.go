@@ -99,7 +99,7 @@ func TestQueryOutput2(t *testing.T) {
 	     allPersons(last: 2 ) {
 	         name 
 	         age
-	         posts {
+	         WhatAmIReading: posts {
 	         	title
 	         	author { # resolver on author: Path: /allPersons/posts/author. Fires Resolver that grabs author details from response data and returns name,age 
 	         		name

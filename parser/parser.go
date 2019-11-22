@@ -827,9 +827,10 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 
 		case *ast.Field:
 			var (
-				newRoot  sdl.GQLTypeProvider
-				response string
-				rootFld  *sdl.Field_
+				newRoot   sdl.GQLTypeProvider
+				fieldPath string
+				response  string
+				rootFld   *sdl.Field_
 			)
 
 			// rootFld = qryFldMap[pathRoot] // could access via map but thinking about memory requirements for maps, when simple scan-loop swaps CPU for scan instead of memory
@@ -857,8 +858,13 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 					// object field
 					//
 					newRoot = rootFld.Type.AST // qryFld's matching  AST
-					fieldPath := pathRoot + "/" + rootFld.Name_.String()
+					fmt.Println("ALias: ", qry.Alias.String())
+					// if qry.Alias.Exists() {
+					// 	fieldPath = pathRoot + "/" + qry.Alias.String()
+					// } else {
 
+					// }
+					fieldPath = pathRoot + "/" + rootFld.Name_.String()
 					fmt.Println("*************************** pathRoot, fieldPath: ", rootFld.Name_.String(), fieldPath)
 
 					qry.Resolver = p.resolver.GetFunc(fieldPath)
@@ -887,7 +893,12 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 											writeout(fieldPath, out, "[ ]", noNewLine)
 
 										default:
-											writeout(pathRoot, out, qry.Name.String()+" : ")
+											if qry.Alias.Exists() {
+												writeout(pathRoot, out, qry.Alias.String())
+											} else {
+												writeout(pathRoot, out, qry.Name.String())
+											}
+											writeout(pathRoot, out, ":", noNewLine)
 											writeout(fieldPath, out, "[", noNewLine)
 											for _, k := range r {
 												fmt.Printf("== Response is an List of objects/fields . %T - %s .newroot Type : %s\n\n", k, k.String(), newRoot.TypeName())
@@ -901,7 +912,12 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 										}
 
 									case sdl.ObjectVals:
-										writeout(pathRoot, out, qry.Name.String()+" : ")
+										if qry.Alias.Exists() {
+											writeout(pathRoot, out, qry.Alias.String())
+										} else {
+											writeout(pathRoot, out, qry.Name.String())
+										}
+										writeout(pathRoot, out, ":")
 										writeout(fieldPath, out, "{", noNewLine)
 
 										p.executeStmt_(newRoot, qry.SelectionSet, fieldPath, r, out)
@@ -975,7 +991,12 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 							case 0:
 								writeout(fieldPath, out, "[ ]", noNewLine)
 							case 1:
-								writeout(pathRoot, out, qry.Name.String()+" : ")
+								if qry.Alias.Exists() {
+									writeout(pathRoot, out, qry.Alias.String())
+								} else {
+									writeout(pathRoot, out, qry.Name.String())
+								}
+								writeout(pathRoot, out, ":", noNewLine)
 								writeout(fieldPath, out, "[ ", noNewLine)
 								writeout(fieldPath, out, "{", noNewLine)
 
@@ -984,7 +1005,12 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 								writeout(fieldPath, out, "}", noNewLine)
 								writeout(fieldPath, out, "]")
 							default:
-								writeout(pathRoot, out, qry.Name.String()+" : ")
+								if qry.Alias.Exists() {
+									writeout(pathRoot, out, qry.Alias.String())
+								} else {
+									writeout(pathRoot, out, qry.Name.String())
+								}
+								writeout(pathRoot, out, ":", noNewLine)
 								writeout(fieldPath, out, "[ ", noNewLine)
 								for _, k := range y {
 									fmt.Printf("++ Response is an List of objects/fields . %T - %s\n\n", k, k.String())
@@ -1020,7 +1046,12 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 					//
 					// scalar
 					//
-					fieldPath := pathRoot + "/" + qry.Name.String()
+					// if qry.Alias.Exists() {
+					// 	fieldPath = pathRoot + "/" + qry.Alias.String()
+					// } else {
+
+					// }
+					fieldPath = pathRoot + "/" + qry.Name.String()
 
 					if qry.Resolver == nil {
 						//
@@ -1058,7 +1089,12 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 							for _, v2 := range y {
 								if v2.Name.EqualString(rootFld.Name_.String()) { // name
 
-									writeout(pathRoot, out, qry.Name.String()+" : ")
+									if qry.Alias.Exists() {
+										writeout(pathRoot, out, qry.Alias.String())
+									} else {
+										writeout(pathRoot, out, qry.Name.String())
+									}
+									writeout(pathRoot, out, ":", noNewLine)
 									switch s := v2.Value.InputValueProvider.(type) { // value
 									case sdl.String_:
 										s_ := string(`"` + s.String() + `"`)
@@ -1111,7 +1147,12 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 							case 0:
 								writeout(fieldPath, out, "[ ]", noNewLine)
 							case 1:
-								writeout(pathRoot, out, qry.Name.String()+" : ")
+								if qry.Alias.Exists() {
+									writeout(pathRoot, out, qry.Alias.String())
+								} else {
+									writeout(pathRoot, out, qry.Name.String())
+								}
+								writeout(pathRoot, out, ":", noNewLine)
 								writeout(fieldPath, out, "[ ", noNewLine)
 
 								writeout(fieldPath, out, "{", noNewLine)
@@ -1121,7 +1162,12 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 								writeout(fieldPath, out, "}", noNewLine)
 								writeout(fieldPath, out, "]", noNewLine)
 							default:
-								writeout(pathRoot, out, qry.Name.String()+" : ")
+								if qry.Alias.Exists() {
+									writeout(pathRoot, out, qry.Alias.String())
+								} else {
+									writeout(pathRoot, out, qry.Name.String())
+								}
+								writeout(pathRoot, out, ":", noNewLine)
 								writeout(fieldPath, out, "[ ", noNewLine)
 								for _, k := range y {
 									fmt.Printf("++ Response is an List of objects/fields . %T - %s\n\n", k, k.String())
@@ -1136,7 +1182,12 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 
 						case sdl.ObjectVals: // type ArgumentS []*ArgumentT  -  represents object with fields
 							fmt.Println("Reponse is a single object")
-							writeout(pathRoot, out, qry.Name.String()+" : ")
+							if qry.Alias.Exists() {
+								writeout(pathRoot, out, qry.Alias.String())
+							} else {
+								writeout(pathRoot, out, qry.Name.String())
+							}
+							writeout(pathRoot, out, ":", noNewLine)
 							writeout(fieldPath, out, "{", noNewLine)
 
 							p.executeStmt_(newRoot, qry.SelectionSet, fieldPath, responseItems, out)
@@ -1282,7 +1333,7 @@ func (p *Parser) parseField() *ast.Field {
 	// Alias Name Arguments Directives SelectionSet
 	f := &ast.Field{}
 
-	_ = p.parseAlias(f, opt).parseName(f).parseArguments(f, opt).parseDirectives(f, opt).parseSelectionSet(f, opt)
+	p.parseAlias(f, opt).parseName(f).parseArguments(f, opt).parseDirectives(f, opt).parseSelectionSet(f, opt)
 
 	return f
 
