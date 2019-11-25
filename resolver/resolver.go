@@ -22,8 +22,8 @@ type Resolvers struct {
 	resolverMap map[ResolverPath]ResolverFunc
 }
 
-func New() Resolvers {
-	return Resolvers{resolverMap: make(map[ResolverPath]ResolverFunc)}
+func New() *Resolvers {
+	return &Resolvers{resolverMap: make(map[ResolverPath]ResolverFunc)}
 }
 
 func (r Resolvers) Register(path string, f ResolverFunc, override ...bool) error {

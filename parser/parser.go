@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	_ "os"
-	"strconv"
 	"strings"
 
 	sdl "github.com/graph-sdl/ast"
@@ -20,6 +19,7 @@ const (
 	cErrLimit  = 8 // how many parse errors are permitted before processing stops
 	Executable = 'E'
 	TypeSystem = 'T'
+	defaultDoc = "DefaultDoc"
 )
 
 type Argument struct {
@@ -31,9 +31,9 @@ type (
 	parseFn func(op string) ast.StatementDef
 
 	Parser struct {
-		l *lexer.Lexer
-
-		extend bool
+		l        *lexer.Lexer
+		document string
+		extend   bool
 
 		abort bool
 		// schema rootAST
@@ -48,7 +48,7 @@ type (
 		root    ast.StatementDef
 		rootVar []*ast.VariableDef
 
-		resolver resolver.Resolvers
+		Resolver *resolver.Resolvers
 
 		parseFns map[token.TokenType]parseFn
 		perror   []error
@@ -64,6 +64,8 @@ func New(l *lexer.Lexer) *Parser {
 	p := &Parser{
 		l: l,
 	}
+
+	p.Resolver = resolver.New()
 
 	p.parseFns = make(map[token.TokenType]parseFn)
 	// regiser Parser methods for each statement type
@@ -83,7 +85,7 @@ func New(l *lexer.Lexer) *Parser {
 
 var FragmentStmts map[sdl.Name_]*ast.FragmentStmt
 
-// repository of all types defined in the graph
+// astsitory of all types defined in the graph
 
 func init() {
 	//	enumRepo = make(ast.EnumRepo_)
@@ -145,7 +147,7 @@ func (p *Parser) nextToken(s ...string) {
 
 // ==================== Start =========================
 
-func (p *Parser) ParseDocument() (*ast.Document, []error) {
+func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 	program := &ast.Document{}
 	program.Statements = []ast.StatementDef{} // contains operational stmts (query, mutation, subscriptions) and fragment stmts
 	//
@@ -156,7 +158,21 @@ func (p *Parser) ParseDocument() (*ast.Document, []error) {
 		schema             *sdl.Schema_
 		allErrors          []error
 	)
-
+	//
+	// set document
+	//
+	ast.SetDefaultDoc(defaultDoc)
+	sdl.SetDefaultDoc(defaultDoc)
+	if len(doc) == 0 {
+		ast.SetDocument(defaultDoc)
+		sdl.SetDocument(defaultDoc)
+	} else {
+		ast.SetDocument(doc[0])
+		sdl.SetDocument(doc[0])
+	}
+	//
+	// fetch schema within the document
+	//
 	if schemaAST = p.fetchAST(sdl.Name_{Name: sdl.NameValue_("schema")}); schemaAST == nil {
 		p.addErr("Abort. There is no schema defined")
 		return nil, p.perror
@@ -338,7 +354,7 @@ func (p *Parser) fetchAST(name sdl.Name_) sdl.GQLTypeProvider {
 
 		if !typeNotExists[name_] {
 
-			if typeDef, err := ast.DBFetch(name_); err != nil {
+			if typeDef, err := sdl.DBFetch(name_); err != nil {
 
 				p.addErr(err.Error())
 				p.abort = true
@@ -374,8 +390,6 @@ func (p *Parser) fetchAST(name sdl.Name_) sdl.GQLTypeProvider {
 	}
 	return ast_
 }
-
-// =====================================================================
 
 // ================== checkFields ======================================
 
@@ -550,170 +564,10 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 	}
 }
 
-// ================== executeStmt ======================================
-
-type Person struct {
-	id    int
-	name  string
-	age   int
-	other []string
-	posts []int
-}
-
-func (p *Person) String() string {
-	var s strings.Builder
-	s.WriteString("{\n")
-	s.WriteString(` name : "`)
-	s.WriteString(p.name)
-	s.WriteString(`"`)
-	s.WriteString("\n age: ")
-	s.WriteString(strconv.Itoa(p.age))
-	s.WriteString("\n")
-	s.WriteString("other : [")
-	for _, v := range p.other {
-		s.WriteString(`"`)
-		s.WriteString(v)
-		s.WriteString(`" `)
-	}
-	s.WriteString(" ]\n")
-	s.WriteString(" posts : [")
-	for _, v := range p.posts {
-		//s.WriteString(strconv.Itoa(v) + " ")
-		s.WriteString(posts[v-1].String())
-	}
-	s.WriteString(" ]\n")
-	s.WriteString("}\n")
-	return s.String()
-}
-
-func (p *Person) ShortString() string {
-	var s strings.Builder
-	s.WriteString("{")
-	s.WriteString(`name : "`)
-	s.WriteString(p.name)
-	s.WriteString(`"`)
-	s.WriteString(" ")
-	s.WriteString(`age : `)
-	s.WriteString(strconv.Itoa(p.age))
-	s.WriteString(` }`)
-	return s.String()
-}
-
-type Post struct {
-	id     int
-	title  string
-	author int
-}
-
-func (p *Post) String() string {
-	var s strings.Builder
-	s.WriteString("\n")
-	s.WriteString(`	{ title : "`)
-	s.WriteString(p.title)
-	s.WriteString(`"	 author : [`)
-	s.WriteString(persons[p.author-100].ShortString())
-	s.WriteString("]	}")
-	return s.String()
-}
-
-var persons = []*Person{
-	&Person{100, "Jack Smith", 53, []string{"abc", "def", "hij"}, []int{1, 2, 3}},
-	&Person{101, "Jenny Hawk", 25, []string{"aaaaabc", "def", "hij"}, []int{3, 4}},
-	&Person{102, "Sabastian Jackson", 44, []string{"123", "def", "hij"}, nil},
-	&Person{103, "Phillip Coats", 54, []string{"xyz", "def", "hij"}, nil},
-	&Person{104, "Kathlyn Host", 33, []string{"abasdc", "def", "hij"}, []int{5}},
-}
-var posts = []*Post{
-	&Post{1, "GraphQL for Begineers", 100}, &Post{2, "Holidays in Tuscany", 101}, &Post{3, "Sweet", 102}, &Post{4, "Programming in GO", 102}, &Post{5, "Skate Boarding Blog", 101},
-	&Post{6, "GraphQL for Architects", 100},
-}
-
-func (p *Parser) executeStmt(root sdl.GQLTypeProvider, stmt_ ast.StatementDef) {
-
-	var (
-		stmt *ast.OperationStmt
-		ok   bool
-		out  strings.Builder
-	)
-	var (
-		testResolverAll = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
-
-			var s strings.Builder
-			var last_ int = 2
-			var err error
-			fmt.Println(args.String())
-			if len(args) > 0 {
-				if args[0].Name.EqualString("last") {
-					last := args[0].Value.InputValueProvider.(sdl.Int_)
-					fmt.Println("Limited to: ", string(last))
-					if last_, err = strconv.Atoi(string(last)); err != nil {
-						fmt.Println(err)
-					}
-				}
-			}
-			s.WriteString(" [")
-			for i, v := range persons {
-				if i > last_-1 {
-					break
-				}
-				s.WriteString(v.String())
-			}
-			s.WriteString("]")
-			return s.String()
-		}
-
-		// testResolver2 = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
-		// 	var name string
-		// 	fmt.Println(resp.String())
-		// 	switch x := resp.(type) {
-		// 	case sdl.ObjectVals:
-		// 		for _, v := range x {
-		// 			if v.Name_.EqualString("name") {
-		// 				name = v.Value.String()
-		// 			}
-		// 		}
-		// 		for _, v := range persons {
-		// 			if v.name == name {
-		// 				return "{ name : " + name + "age : " + strconv.Itoa(v.age) + " }"
-		// 			}
-		// 		}
-		// 		return "abc"
-		// 	}
-		// 	return "abc"
-		// }
-	)
-	if stmt, ok = stmt_.(*ast.OperationStmt); !ok {
-		return
-	}
-	// only for operational Query
-	if stmt.Type != "query" {
-		return
-	}
-	//
-	// register resolvers - this would normally be populated by the client and resolverMap passed to server
-	//
-	p.resolver = resolver.New()
-	if err := p.resolver.Register("Query/allPersons", testResolverAll); err != nil {
-		p.addErr(err.Error())
-		return
-	}
-	// if err := p.resolver.Register("Query/allPersons/posts/author", testResolver2); err != nil {
-	// 	p.addErr(err.Error())
-	// 	return
-	// }
-	fmt.Println("Resolver paths: ")
-	fmt.Println(p.resolver.String())
-	fmt.Println("================================ executeStmt ================================")
-	out.WriteString("response: {")
-
-	p.executeStmt_(root, stmt.SelectionSet, string(root.TypeName()), nil, &out)
-
-	fmt.Println("==== output ====== ")
-	fmt.Println(out.String())
-}
-
 var noNewLine bool = true
 
+// ================== writeout ======================================
+// writeout prints out the Grapql JSON passed to it.
 func writeout(path string, s *strings.Builder, str string, noNewLine ...bool) {
 	tabs := strings.Count(path, "/")
 	if len(noNewLine) == 0 {
@@ -724,6 +578,56 @@ func writeout(path string, s *strings.Builder, str string, noNewLine ...bool) {
 	}
 	s.WriteString(" ")
 	s.WriteString(str)
+}
+
+// ================== executeStmt ======================================
+
+func (p *Parser) executeStmt(root sdl.GQLTypeProvider, stmt_ ast.StatementDef) {
+
+	var (
+		stmt *ast.OperationStmt
+		ok   bool
+		out  strings.Builder
+	)
+	var (
+
+	// testResolver2 = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
+	// 	var name string
+	// 	fmt.Println(resp.String())
+	// 	switch x := resp.(type) {
+	// 	case sdl.ObjectVals:
+	// 		for _, v := range x {
+	// 			if v.Name_.EqualString("name") {
+	// 				name = v.Value.String()
+	// 			}
+	// 		}
+	// 		for _, v := range persons {
+	// 			if v.name == name {
+	// 				return "{ name : " + name + "age : " + strconv.Itoa(v.age) + " }"
+	// 			}
+	// 		}
+	// 		return "abc"
+	// 	}
+	// 	return "abc"
+	// }
+	)
+	if stmt, ok = stmt_.(*ast.OperationStmt); !ok {
+		return
+	}
+	// only for operational Query
+	if stmt.Type != "query" {
+		return
+	}
+
+	fmt.Println("Resolver paths: ")
+	fmt.Println(p.Resolver.String())
+	fmt.Println("================================ executeStmt ================================")
+	out.WriteString("{ data: {")
+
+	p.executeStmt_(root, stmt.SelectionSet, string(root.TypeName()), nil, &out)
+
+	fmt.Println("==== output ====== ")
+	fmt.Println(out.String())
 }
 
 //type responseProvider sdl.InputValueProvider
@@ -829,6 +733,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 			var (
 				newRoot   sdl.GQLTypeProvider
 				fieldPath string
+				fieldName string
 				response  string
 				rootFld   *sdl.Field_
 			)
@@ -842,8 +747,13 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 				if !qry.Name.Equals(rootFld.Name_) {
 					continue
 				}
-				fmt.Println("found : ", rootFld.Name_, qry.Name)
 
+				fmt.Println("found : ", rootFld.Name_, qry.Name)
+				if qry.Alias.Exists() {
+					fieldName = qry.Alias.String()
+				} else {
+					fieldName = qry.Name.String()
+				}
 				// if responseItems == nil {
 				// 	qry.Resolver = testResolverAll
 				// } else {
@@ -867,7 +777,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 					fieldPath = pathRoot + "/" + rootFld.Name_.String()
 					fmt.Println("*************************** pathRoot, fieldPath: ", rootFld.Name_.String(), fieldPath)
 
-					qry.Resolver = p.resolver.GetFunc(fieldPath)
+					qry.Resolver = p.Resolver.GetFunc(fieldPath)
 
 					if qry.Resolver == nil {
 
@@ -893,11 +803,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 											writeout(fieldPath, out, "[ ]", noNewLine)
 
 										default:
-											if qry.Alias.Exists() {
-												writeout(pathRoot, out, qry.Alias.String())
-											} else {
-												writeout(pathRoot, out, qry.Name.String())
-											}
+											writeout(pathRoot, out, fieldName)
 											writeout(pathRoot, out, ":", noNewLine)
 											writeout(fieldPath, out, "[", noNewLine)
 											for _, k := range r {
@@ -912,11 +818,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 										}
 
 									case sdl.ObjectVals:
-										if qry.Alias.Exists() {
-											writeout(pathRoot, out, qry.Alias.String())
-										} else {
-											writeout(pathRoot, out, qry.Name.String())
-										}
+										writeout(pathRoot, out, fieldName)
 										writeout(pathRoot, out, ":")
 										writeout(fieldPath, out, "{", noNewLine)
 
@@ -991,11 +893,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 							case 0:
 								writeout(fieldPath, out, "[ ]", noNewLine)
 							case 1:
-								if qry.Alias.Exists() {
-									writeout(pathRoot, out, qry.Alias.String())
-								} else {
-									writeout(pathRoot, out, qry.Name.String())
-								}
+								writeout(pathRoot, out, fieldName)
 								writeout(pathRoot, out, ":", noNewLine)
 								writeout(fieldPath, out, "[ ", noNewLine)
 								writeout(fieldPath, out, "{", noNewLine)
@@ -1005,11 +903,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 								writeout(fieldPath, out, "}", noNewLine)
 								writeout(fieldPath, out, "]")
 							default:
-								if qry.Alias.Exists() {
-									writeout(pathRoot, out, qry.Alias.String())
-								} else {
-									writeout(pathRoot, out, qry.Name.String())
-								}
+								writeout(pathRoot, out, fieldName)
 								writeout(pathRoot, out, ":", noNewLine)
 								writeout(fieldPath, out, "[ ", noNewLine)
 								for _, k := range y {
@@ -1089,11 +983,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 							for _, v2 := range y {
 								if v2.Name.EqualString(rootFld.Name_.String()) { // name
 
-									if qry.Alias.Exists() {
-										writeout(pathRoot, out, qry.Alias.String())
-									} else {
-										writeout(pathRoot, out, qry.Name.String())
-									}
+									writeout(pathRoot, out, fieldName)
 									writeout(pathRoot, out, ":", noNewLine)
 									switch s := v2.Value.InputValueProvider.(type) { // value
 									case sdl.String_:
@@ -1147,14 +1037,9 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 							case 0:
 								writeout(fieldPath, out, "[ ]", noNewLine)
 							case 1:
-								if qry.Alias.Exists() {
-									writeout(pathRoot, out, qry.Alias.String())
-								} else {
-									writeout(pathRoot, out, qry.Name.String())
-								}
+								writeout(pathRoot, out, fieldName)
 								writeout(pathRoot, out, ":", noNewLine)
 								writeout(fieldPath, out, "[ ", noNewLine)
-
 								writeout(fieldPath, out, "{", noNewLine)
 
 								p.executeStmt_(newRoot, qry.SelectionSet, fieldPath, y[0].InputValueProvider, out) //responseItems)
@@ -1162,11 +1047,8 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 								writeout(fieldPath, out, "}", noNewLine)
 								writeout(fieldPath, out, "]", noNewLine)
 							default:
-								if qry.Alias.Exists() {
-									writeout(pathRoot, out, qry.Alias.String())
-								} else {
-									writeout(pathRoot, out, qry.Name.String())
-								}
+								writeout(pathRoot, out, fieldName)
+								writeout(pathRoot, out, fieldName)
 								writeout(pathRoot, out, ":", noNewLine)
 								writeout(fieldPath, out, "[ ", noNewLine)
 								for _, k := range y {
@@ -1182,11 +1064,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 
 						case sdl.ObjectVals: // type ArgumentS []*ArgumentT  -  represents object with fields
 							fmt.Println("Reponse is a single object")
-							if qry.Alias.Exists() {
-								writeout(pathRoot, out, qry.Alias.String())
-							} else {
-								writeout(pathRoot, out, qry.Name.String())
-							}
+							writeout(pathRoot, out, fieldName)
 							writeout(pathRoot, out, ":", noNewLine)
 							writeout(fieldPath, out, "{", noNewLine)
 
@@ -1859,7 +1737,7 @@ func (p *Parser) parseType(f sdl.AssignTyper) *Parser {
 		bit  byte
 		name string
 		//	ast_ ast.GQLTypeProvider
-		//typedef ast.TypeFlag_ // token defines SCALAR types only. All other types will be populated in repoType map.
+		//typedef ast.TypeFlag_ // token defines SCALAR types only. All other types will be populated in astType map.
 		depth   int
 		nameLoc *sdl.Loc_
 	)

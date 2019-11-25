@@ -3,6 +3,7 @@ package parser
 import (
 	"testing"
 
+	"github.com/graphql/client"
 	"github.com/graphql/lexer"
 )
 
@@ -101,12 +102,12 @@ func TestQueryOutput2(t *testing.T) {
 	         age
 	         WhatAmIReading: posts {
 	         	title
-	         	author { # resolver on author: Path: /allPersons/posts/author. Fires Resolver that grabs author details from response data and returns name,age 
+	         	author {
 	         		name
 	         		age
 	         	}
 	         }
-	         other
+	         #other
 	     }
 	}
 `
@@ -114,10 +115,18 @@ func TestQueryOutput2(t *testing.T) {
 	var expectedErr [1]string
 	expectedErr[0] = `asdf`
 
+	schema := "DefaultDoc"
 	l := lexer.New(input)
 	p := New(l)
 	//	p.ClearCache()
-	_, errs := p.ParseDocument()
+	//
+	if err := p.Resolver.Register("Query/allPersons", client.ResolverAll); err != nil {
+		p.addErr(err.Error())
+	}
+	_, errs := p.ParseDocument(schema)
+	//
+	// register resolvers - this would normally be populated by the client and resolverMap passed to server
+
 	for _, ex := range expectedErr {
 		if len(ex) == 0 {
 			break

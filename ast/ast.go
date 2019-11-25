@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	sdl "github.com/graph-sdl/ast"
-	_ "github.com/graphql/token"
 )
 
 type UnresolvedMap sdl.UnresolvedMap //map[Name_]*sdl.Type_
