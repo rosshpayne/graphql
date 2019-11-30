@@ -428,7 +428,7 @@ type Field struct {
 	Path  string    // path to field in statement
 	sdl.Arguments_
 	sdl.Directives_
-	SelectionSet []SelectionSetI                                              //a Field may contain a SS or it may not
+	SelectionSet []SelectionSetI                                              //an Field whose type is an object will contain a SS. For scalars SS wll be nil
 	Resolver     func(obj sdl.InputValueProvider, args sdl.ObjectVals) string // fieldResolver //, info QLInfo)
 }
 
