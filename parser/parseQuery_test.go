@@ -174,7 +174,7 @@ func TestQueryTwinResolver(t *testing.T) {
 `
 
 	var expectedErr [1]string
-	expectedErr[0] = `asdf`
+	expectedErr[0] = `Expected single value got List for Post at line: 5 column: 27`
 
 	schema := "DefaultDoc"
 	l := lexer.New(input)
