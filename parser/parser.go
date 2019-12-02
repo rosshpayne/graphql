@@ -782,7 +782,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 							return
 						}
 						//
-						// find name element in response, match up to current query field. RespItem is based on Input Value model
+						// find element in response that matches current query field. RespItem is based on Input Value design
 						//
 						switch respItem := responseItems.(type) {
 						// response will always be "FieldName:value" pairs e.g. { data: [ { } { } ], where value may be a List_ or another ObjectVal or a scalar
@@ -812,11 +812,17 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 										return
 									}
 								}
-
 								switch r := respfld.Value.InputValueProvider.(type) {
 
 								case sdl.List_:
-									//  compare with root type
+									// root type should be List_
+									if rootFld.Type.Depth == 0 {
+										p.addErr(fmt.Sprintf(`Expected a single value for "%s" , response returned a List  %s`, rootFld.Name, qry.Name.AtPosition()))
+									}
+									//TODO include nullable check
+									if rootFld.Type.IsType() != r.IsType() {
+										p.addErr(fmt.Sprintf(`1 Expected type of "%s" got %s instead for field "%s" %s`, rootFld.Type.IsType(), r.IsType(), rootFld.Name, qry.Name.AtPosition()))
+									}
 
 									switch len(r) {
 
@@ -824,6 +830,23 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 										writeout(fieldPath, out, "[ ]", noNewLine)
 
 									default:
+										//type List_ []*InputValue_ . type InputValue_ struct {InputValueProvider	,Loc  *Loc_}
+										// [                                                             ]     sdl.List_        depth=3
+										//  [                          ] [              ] [             ]       sdl.List_        depth=2
+										//   [1 2 3] [1 2 3 12] [23 32]   [23 23] [2 5]    [3 5] [3 6 6]         sdl.List_        depth=1
+										//    1 2 3                                                               int values       depth=0
+										// string() len(l)  2 *ast.InputValue_  ast.List_ 0
+										// string() len(l)  3 *ast.InputValue_  ast.Int_ 0
+										// string() len(l)  3 *ast.InputValue_  ast.Int_ 1
+										// string() len(l)  3 *ast.InputValue_  ast.Int_ 2
+										// string() len(l)  2 *ast.InputValue_  ast.List_ 1
+										// string() len(l)  4 *ast.InputValue_  ast.Int_ 0
+										// string() len(l)  4 *ast.InputValue_  ast.Int_ 1
+										// string() len(l)  4 *ast.InputValue_  ast.Int_ 2
+										// string() len(l)  4 *ast.InputValue_  ast.Int_ 3
+										// [2]x
+										// x[0] -> s[3] -> scalar
+										// x[1] -> s[4] -> scalar
 										var f func(y sdl.List_)
 										// f will output sdl.List_ for any level of nesting
 										f = func(y sdl.List_) {
@@ -855,7 +878,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 									}
 									//TODO include nullable check
 									if rootFld.Type.IsType() != r.IsType() {
-										p.addErr(fmt.Sprintf(`Expected type of "%s" got %s instead for field "%s" %s`, rootFld.Type.IsType(), r.IsType(), rootFld.Name, qry.Name.AtPosition()))
+										p.addErr(fmt.Sprintf(`2 Expected type of "%s" got %s instead for field "%s" %s`, rootFld.Type.IsType(), r.IsType(), rootFld.Name, qry.Name.AtPosition()))
 									}
 									fmt.Printf("== Response is OBJECTVALS of objects/fields .")
 									writeout(fieldPath, out, "{", noNewLine)
@@ -865,15 +888,18 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 									writeout(fieldPath, out, "}", noNewLine)
 
 								default:
+									// as root type is an object we shoul not get a scalar type - so default represenets an error
 									// compare with root type
 									if rootFld.Type.Depth != 0 {
 										p.addErr(fmt.Sprintf(`Expected List of values for "%s" , response returned single value instead %s`, rootFld.Name, qry.Name.AtPosition()))
 									}
 									//TODO include nullable check
 									if rootFld.Type.IsType() != r.IsType() {
-										p.addErr(fmt.Sprintf(`Expected type of "%s" got %s instead for field "%s" %s`, rootFld.Type.IsType(), r.IsType(), rootFld.Name, qry.Name.AtPosition()))
+										p.addErr(fmt.Sprintf(`3 Expected type of "%s" got %s instead for field "%s" %s`, rootFld.Type.IsType(), r.IsType(), rootFld.Name, qry.Name.AtPosition()))
 									}
-									fmt.Println("unknown Input Value Type") //TODO - make an error
+									p.addErr(fmt.Sprintf(`Expected Object type got scalar  %s`, qry.Name.AtPosition()))
+									p.abort = true
+									return
 								}
 								break
 							}
@@ -888,7 +914,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 						//
 						// Resolver exists
 						//
-						// find the associated response field. First time through response will be nil however.
+						// find the associated response field. First time through response will be nil as no resolver has been called.
 						//
 						var (
 							resp          sdl.InputValueProvider
@@ -904,9 +930,9 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 						//  as input when executing the resolver.
 						//
 						switch respItem := responseItems.(type) {
-						//case sdl.List_:
-						// [ value value ... ] type List_  []*InputValue_
+
 						// response data cannot be a List_ as there is no Name component, only data. List_ can only ever be field data.
+
 						case sdl.ObjectVals:
 							// { field: value, field: value ... } type ObjectVals []*ArgumentT   type ArgumentT struct { Name_, Value *InputValue_}   type InputValue { InputValueProvider, Loc *Loc_
 							//
@@ -930,7 +956,6 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 							switch y := resp.(type) {
 
 							case sdl.List_:
-								fmt.Println("embedded type: ", y[0].InputValueProvider.IsType())
 								if y[0].InputValueProvider.IsType() != rootFld.Type.IsType() {
 									respType = y[0].InputValueProvider.IsType()
 									mismatchTypes = true
@@ -942,9 +967,14 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 								for _, v := range y {
 									fmt.Println("embedded type for ObjectVals: ", v.Name_, v.Value.InputValueProvider.IsType())
 								}
+								//respType = ??
 
 							default:
-								// scalar types, Int, Float, String, EnumValues,
+								// scalar types, Int, Float, String, EnumValues - as rootFld.Type is an Object (see above), scalars should not appear here.
+								p.addErr(fmt.Sprintf(`Expect object type for response field "%s", got scalar type field %s`, qry.Name, qry.Name.AtPosition()))
+								p.abort = true
+								return
+
 							}
 							//
 							// if response type, for the current query field, does not match root type then check for existence of "resp" argument matches from root type
@@ -980,6 +1010,9 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 								}
 							}
 						}
+						//
+						// response data maybe nil (first time through) or supplied from recursive call via func argument
+						//
 						if resp == nil {
 							resp = responseItems
 						}
@@ -1033,7 +1066,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 						writeout(pathRoot, out, ":", noNewLine)
 						// find field "data" and access its data
 						//
-						// interested in value component of response data only.      {data: value}
+						// interested in value component of response data only.      {name: value} e.g {data:["abc" "def"]
 						//
 						fmt.Printf("x %T\n", responseItems)
 						if x, ok := responseItems.(sdl.ObjectVals); ok {
@@ -1117,11 +1150,11 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 							p.abort = true
 							return
 						}
-						switch y := responseItems.(type) {
+						switch r := responseItems.(type) {
 
 						case sdl.ObjectVals:
 							fmt.Println("Reponse is a single object { name:value name2:value2 ...", fieldPath)
-							for _, response := range y {
+							for _, response := range r {
 								//
 								// match response field against root field and  grab the associated response field data.
 								//
@@ -1149,37 +1182,50 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 								}
 								switch y := response.Value.InputValueProvider.(type) { // value
 
-								case sdl.List_: //type List_ []*InputValue_ . type InputValue_ struct {InputValueProvider	,Loc  *Loc_}
-									// [                                                             ]     sdl.List_        depth=3
-									//  [                          ] [              ] [             ]       sdl.List_        depth=2
-									//   [1 2 3] [1 2 3 12] [23 32]   [23 23] [2 5]    [3 5] [3 6 6]         sdl.List_        depth=1
-									//    1 2 3                                                               int values       depth=0
-									// string() len(l)  2 *ast.InputValue_  ast.List_ 0
-									// string() len(l)  3 *ast.InputValue_  ast.Int_ 0
-									// string() len(l)  3 *ast.InputValue_  ast.Int_ 1
-									// string() len(l)  3 *ast.InputValue_  ast.Int_ 2
-									// string() len(l)  2 *ast.InputValue_  ast.List_ 1
-									// string() len(l)  4 *ast.InputValue_  ast.Int_ 0
-									// string() len(l)  4 *ast.InputValue_  ast.Int_ 1
-									// string() len(l)  4 *ast.InputValue_  ast.Int_ 2
-									// string() len(l)  4 *ast.InputValue_  ast.Int_ 3
-									// [2]x
-									// x[0] -> s[3] -> scalar
-									// x[1] -> s[4] -> scalar
-
-									var f func(y sdl.List_)
+								case sdl.List_:
+									// root type should be List_
+									if rootFld.Type.Depth == 0 {
+										p.addErr(fmt.Sprintf(`Expected a single value for "%s" , response returned a List  %s`, rootFld.Name, qry.Name.AtPosition()))
+									}
+									//TODO include nullable check
+									var (
+										//	d int
+										f func(y sdl.List_, d int)
+									)
 									// f will output sdl.List_ for any level of nesting
-									f = func(y sdl.List_) {
+									// d is the nesting depth of the List_
+									f = func(y sdl.List_, d int) {
 
 										for i := 0; i < len(y); i++ {
 											if x, ok := y[i].InputValueProvider.(sdl.List_); ok {
 												writeout(fieldPath, out, "[ ", noNewLine)
-												f(x)
+												d++ // nesting depth d
+												fmt.Println("d = ", d)
+												if d > rootFld.Type.Depth {
+													p.addErr(fmt.Sprintf(`Exceeds nesting of List type for "%s" %s`, qry.Name, qry.Name.AtPosition()))
+												}
+												f(x, d)
 												writeout(fieldPath, out, "] ", noNewLine)
+												d--
 											} else {
 												//TODO - check for null constraint
 												// optimise by performing loop here rather than use outer for loop
+												fmt.Println("RRRRRRRRRRR ", d, rootFld.Type.Depth)
+												if d < rootFld.Type.Depth {
+													p.addErr(fmt.Sprintf(`Expect a nesting level of %d, got %d, for scalar values in List for "%s" %s`, rootFld.Type.Depth, d, qry.Name, qry.Name.AtPosition()))
+												}
+												var bit byte = 1
+												bit &= rootFld.Type.Constraint >> uint(d)
 												for i := 0; i < len(y); i++ {
+													if y[i].IsType() != rootFld.Type.Name.String() {
+														if _, ok := y[i].InputValueProvider.(sdl.Null_); !ok {
+															p.addErr(fmt.Sprintf(`1 Expected "%s" got %s %s`, rootFld.Type.Name_.String(), y[i].IsType(), qry.Name.AtPosition()))
+														} else {
+															if bit == 1 {
+																p.addErr(fmt.Sprintf(`Expected non-null got null %s`, qry.Name.AtPosition()))
+															}
+														}
+													}
 													writeout(fieldPath, out, y[i].String(), noNewLine)
 												}
 												break
@@ -1187,38 +1233,54 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 										}
 									}
 									writeout(fieldPath, out, "[ ", noNewLine)
-									f(y)
+									f(y, 1)
 									writeout(fieldPath, out, "] ", noNewLine)
 
 								case sdl.String_:
 									// TODO: remove this case - using "null" to represent null value in response string
 									var bit byte = 1
+									if rootFld.Type.Name.String() != y.IsType().String() {
+										p.addErr(fmt.Sprintf(`2 Expected "%s" got %s %s`, rootFld.Type.Name_.String(), r.IsType().String(), qry.Name.AtPosition()))
+										return
+									}
 									bit &= rootFld.Type.Constraint
 									if bit == 1 && y.String() == "null" {
 										p.addErr(fmt.Sprintf(`Cannot be null for %s %s`, rootFld.Type.Name_.String(), qry.Name.AtPosition()))
 									}
 									if !(rootFld.Type.Name_.String() == sdl.STRING.String() || rootFld.Type.Name_.String() == sdl.RAWSTRING.String()) {
-										p.addErr(fmt.Sprintf(`Expected String got %s %s`, rootFld.Type.Name_.String(), qry.Name.AtPosition()))
+										p.addErr(fmt.Sprintf(`3 Expected String got %s %s`, rootFld.Type.Name_.String(), qry.Name.AtPosition()))
 									}
 									s_ := string(`"` + y.String() + `"`)
 									writeout(fieldPath, out, s_, noNewLine)
 								case sdl.RawString_:
+									if rootFld.Type.Name.String() != y.IsType().String() {
+										p.addErr(fmt.Sprintf(`4 Expected "%s" got %s %s`, rootFld.Type.Name_.String(), r.IsType().String(), qry.Name.AtPosition()))
+										return
+									}
 									s_ := string(`"""` + y.String() + `"""`)
 									writeout(fieldPath, out, s_, noNewLine)
 								case sdl.Null_:
+									if rootFld.Type.Name.String() != y.IsType().String() {
+										p.addErr(fmt.Sprintf(`5 Expected "%s" got %s %s`, rootFld.Type.Name_.String(), r.IsType().String(), qry.Name.AtPosition()))
+										return
+									}
 									var bit byte = 1
 									bit &= rootFld.Type.Constraint
 									if bit == 1 {
 										p.addErr(fmt.Sprintf(`Value cannot be null %s %s`, rootFld.Type.Name_.String(), qry.Name.AtPosition()))
 									}
 								default:
-									s_ := response.Value.InputValueProvider.String()
-									writeout(fieldPath, out, s_, noNewLine)
+									if rootFld.Type.Name.String() != y.IsType().String() {
+										p.addErr(fmt.Sprintf(`6 Expected "%s" got %s %s`, rootFld.Type.Name_.String(), r.IsType().String(), qry.Name.AtPosition()))
+									} else {
+										s_ := response.Value.InputValueProvider.String()
+										writeout(fieldPath, out, s_, noNewLine)
+									}
 								}
 								break
 							}
 						default:
-							fmt.Printf("Response is aunknown %T\n", y)
+							fmt.Printf("Response is aunknown %T\n", r)
 						}
 						//
 						// only field for an Input type must be present if not-null constraint enabled. Normal query field may or may not be present

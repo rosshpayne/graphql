@@ -155,13 +155,77 @@ func TestQuerySingleResolver(t *testing.T) {
 	}
 }
 
+func TestQueryTwinResolverSinglePostDef(t *testing.T) {
+
+	var input = `query XYZ {
+	     allPersons(last: 2 ) {
+	         name 
+	         age
+	         WhatAmIReading: posts { # error here... Type definition lists single value, resolver returns List	  posts (resp: [Int!]) : Post! 
+	         	title
+	         	author  {
+	         		name
+	         		age
+	         	}
+	         }
+	         #other
+	     }
+	}
+`
+
+	var expectedErr [1]string
+	expectedErr[0] = `Expected single value got List for Post at line: 5 column: 27`
+
+	schema := "DefaultDoc"
+	l := lexer.New(input)
+	p := New(l)
+	//	p.ClearCache()
+	//
+	if err := p.Resolver.Register("Query/allPersons", client.ResolvePartial); err != nil {
+		p.addErr(err.Error())
+	}
+	if err := p.Resolver.Register("Query/allPersons/posts", client.ResolvePosts); err != nil {
+		p.addErr(err.Error())
+	}
+	d, errs := p.ParseDocument(schema)
+	fmt.Println(d.String())
+	//
+	// register resolvers - this would normally be populated by the client and resolverMap passed to server
+
+	for _, ex := range expectedErr {
+		if len(ex) == 0 {
+			break
+		}
+		found := false
+		for _, err := range errs {
+			if trimWS(err.Error()) == trimWS(ex) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Expected Error = [%q]`, ex)
+		}
+	}
+	for _, got := range errs {
+		found := false
+		for _, exp := range expectedErr {
+			if trimWS(got.Error()) == trimWS(exp) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Unexpected Error = [%q]`, got.Error())
+		}
+	}
+}
+
 func TestQueryTwinResolver(t *testing.T) {
 
 	var input = `query XYZ {
 	     allPersons(last: 2 ) {
 	         name 
 	         age
-	         WhatAmIReading: posts {
+	         WhatAmIReading: posts { # error here... Type definition lists single value, resolver returns List	  posts (resp: [Int!]) : Post! 
 	         	title
 	         	author  {
 	         		name
