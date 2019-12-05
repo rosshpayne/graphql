@@ -219,15 +219,15 @@ func TestQueryTwinResolverSinglePostDef(t *testing.T) {
 	}
 }
 
-func TestQueryTwinResolver(t *testing.T) {
+func TestQueryTwinResolverX(t *testing.T) {
 
 	var input = `query XYZ {
 	     allPersons(last: 2 ) {
 	         name 
-	         age
+	         age(ScaleBy: 10.)
 	         WhatAmIReading: posts { # error here... Type definition lists single value, resolver returns List	  posts (resp: [Int!]) : Post! 
 	         	title
-	         	author  {
+	         	author  { # type Person, AST List_ of Object (person)
 	         		name
 	         		age
 	         	}
@@ -249,6 +249,9 @@ func TestQueryTwinResolver(t *testing.T) {
 		p.addErr(err.Error())
 	}
 	if err := p.Resolver.Register("Query/allPersons/posts", client.ResolvePosts); err != nil {
+		p.addErr(err.Error())
+	}
+	if err := p.Resolver.Register("Query/allPersons/age", client.ResolveAge); err != nil {
 		p.addErr(err.Error())
 	}
 	d, errs := p.ParseDocument(schema)
