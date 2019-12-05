@@ -229,7 +229,7 @@ func TestQueryTwinResolverX(t *testing.T) {
 	         	title
 	         	author  { # type Person, AST List_ of Object (person)
 	         		name
-	         		age
+	         		age(ScaleBy: 3.)
 	         	}
 	         }
 	         #other
@@ -252,6 +252,9 @@ func TestQueryTwinResolverX(t *testing.T) {
 		p.addErr(err.Error())
 	}
 	if err := p.Resolver.Register("Query/allPersons/age", client.ResolveAge); err != nil {
+		p.addErr(err.Error())
+	}
+	if err := p.Resolver.Register("Query/allPersons/posts/author/age", client.ResolveAge); err != nil {
 		p.addErr(err.Error())
 	}
 	d, errs := p.ParseDocument(schema)

@@ -1,0 +1,318 @@
+package client
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+
+	sdl "github.com/graph-sdl/ast"
+)
+
+type Person struct {
+	id    int
+	name  string
+	age   [][]interface{}
+	other []string
+	posts []int
+}
+
+func (p *Person) String() string {
+	var s strings.Builder
+	s.WriteString("{\n")
+	s.WriteString(` name : "`)
+	s.WriteString(p.name)
+	s.WriteString(`"`)
+	s.WriteString("\n age: [")
+	for _, v := range p.age {
+		s.WriteString("[")
+		for i, v2 := range v {
+			switch x := v2.(type) {
+			case int:
+				s.WriteString(strconv.Itoa(x))
+			case string:
+				if x == "null" {
+					s.WriteString(x)
+				} else {
+					s.WriteString(fmt.Sprintf("%q", x))
+				}
+			}
+			if i < len(v)-1 {
+				s.WriteString(" ")
+			}
+		}
+		s.WriteString("] ")
+	}
+	s.WriteString("]\n")
+	s.WriteString("other : [")
+	for _, v := range p.other {
+		s.WriteString(`"`)
+		s.WriteString(v)
+		s.WriteString(`" `)
+	}
+	s.WriteString(" ]\n")
+	s.WriteString(" posts : [")
+	for _, v := range p.posts {
+		//s.WriteString(strconv.Itoa(v) + " ")
+		s.WriteString(posts[v-1].String())
+	}
+	s.WriteString(" ]\n")
+	s.WriteString("}\n")
+	return s.String()
+}
+
+func (p *Person) ShortString() string {
+	var s strings.Builder
+	s.WriteString("{")
+	s.WriteString(`name : "`)
+	s.WriteString(p.name)
+	s.WriteString(`"`)
+	s.WriteString(" ")
+	s.WriteString("\n age: [")
+	for _, v := range p.age {
+		s.WriteString("[")
+		for i, v2 := range v {
+			switch x := v2.(type) {
+			case int:
+				s.WriteString(strconv.Itoa(x))
+			case string:
+				if x == "null" {
+					s.WriteString(x)
+				} else {
+					s.WriteString(fmt.Sprintf("%q", x))
+				}
+			}
+			if i < len(v)-1 {
+				s.WriteString(" ")
+			}
+		}
+		s.WriteString("] ")
+	}
+	s.WriteString("]\n")
+	s.WriteString(` }`)
+	return s.String()
+}
+
+func (p *Person) StringPartial() string {
+	var s strings.Builder
+	s.WriteString("{\n")
+	s.WriteString(` name : "`)
+	s.WriteString(p.name)
+	s.WriteString(`"`)
+	s.WriteString("\n age: [")
+	for _, v := range p.age {
+		s.WriteString("[")
+		for i, v2 := range v {
+			switch x := v2.(type) {
+			case int:
+				s.WriteString(strconv.Itoa(x))
+			case string:
+				if x == "null" {
+					s.WriteString(x)
+				} else {
+					s.WriteString(fmt.Sprintf("%q", x))
+				}
+			}
+			if i < len(v)-1 {
+				s.WriteString(" ")
+			}
+		}
+		s.WriteString("] ")
+	}
+	s.WriteString("]\n")
+	s.WriteString("\n")
+	s.WriteString("other : [")
+	for _, v := range p.other {
+		s.WriteString(`"`)
+		s.WriteString(v)
+		s.WriteString(`" `)
+	}
+	s.WriteString(" ]\n")
+	s.WriteString(" posts : [")
+	for _, v := range p.posts {
+		s.WriteString(strconv.Itoa(v) + " ")
+		//s.WriteString(v.String())
+	}
+	s.WriteString(" ]\n")
+	s.WriteString("}\n")
+	return s.String()
+}
+
+type Post struct {
+	id     int
+	title  string
+	author int
+}
+
+func (p *Post) String() string {
+	var s strings.Builder
+	s.WriteString("\n")
+	if len(p.title) > 0 {
+		s.WriteString(`	{ title : "`)
+		s.WriteString(p.title)
+	}
+	s.WriteString(`"	 author : [`)
+	s.WriteString(persons[p.author-100].ShortString())
+	s.WriteString("]	}")
+	return s.String()
+}
+
+var persons = []*Person{
+	&Person{100, "Jack Smith", [][]interface{}{[]interface{}{53, 54, 55, 56}, []interface{}{25, 26, 28, 27}}, []string{"abc", "def", "hij"}, []int{1, 2, 3}},
+	&Person{101, "Jenny Hawk", [][]interface{}{[]interface{}{25, 26, 27}, []interface{}{44, 45, 46}}, []string{"aaaaabc", "def", "hij"}, []int{3, 7, 4}},
+	&Person{102, "Sabastian Jackson", [][]interface{}{[]interface{}{44, 45, 46}, []interface{}{54, 55, 56, 57}}, []string{"123", "def", "hij"}, nil},
+	&Person{103, "Phillip Coats", [][]interface{}{[]interface{}{54, 55, 56, 57}}, []string{"xyz", "def", "hij"}, nil},
+	&Person{104, "Kathlyn Host", [][]interface{}{[]interface{}{33, 32, 31}, []interface{}{33, 32, 31}}, []string{"abasdc", "def", "hij"}, []int{5}},
+}
+var posts = []*Post{
+	&Post{1, "GraphQL for Begineers", 100}, &Post{2, "Holidays in Tuscany", 101}, &Post{3, "Sweet", 102}, &Post{4, "Programming in GO", 102}, &Post{5, "Skate Boarding Blog", 101},
+	&Post{6, "GraphQL for Architects", 100}, &Post{id: 7, title: "xyz", author: 100},
+}
+
+var ResolverAll = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
+
+	var s strings.Builder
+	var last_ int = 2
+	var err error
+	fmt.Println(args.String())
+	if len(args) > 0 {
+		if args[0].Name.EqualString("last") {
+			last := args[0].Value.InputValueProvider.(sdl.Int_)
+			fmt.Println("Limited to: ", string(last))
+			if last_, err = strconv.Atoi(string(last)); err != nil {
+				fmt.Println(err)
+			}
+		}
+	}
+	s.WriteString("{data: [")
+	for i, v := range persons {
+		if i > last_-1 {
+			break
+		}
+		s.WriteString(v.String())
+	}
+	s.WriteString("]}")
+	return s.String()
+}
+
+var ResolvePartial = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
+
+	var s strings.Builder
+	var last_ int = 2
+	var err error
+	if len(args) > 0 {
+		if args[0].Name.EqualString("last") {
+			last := args[0].Value.InputValueProvider.(sdl.Int_)
+			fmt.Println("Limited to: ", string(last))
+			if last_, err = strconv.Atoi(string(last)); err != nil {
+				fmt.Println(err)
+			}
+		}
+	}
+	s.WriteString("{data: [")
+	for i, v := range persons {
+		if i > last_-1 {
+			break
+		}
+		s.WriteString(v.StringPartial())
+	}
+	s.WriteString("] }")
+	return s.String()
+
+}
+
+var ResolvePosts = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
+
+	var s strings.Builder
+
+	for _, v := range args {
+		if v.Name_.EqualString("resp") {
+			resp := v.Value.InputValueProvider
+			switch x := resp.(type) {
+			case sdl.List_:
+				if len(x) > 0 {
+					s.WriteString("{data: [")
+				}
+				for i, v := range x {
+					k := string(v.InputValueProvider.(sdl.Int_))
+					if ki, err := strconv.Atoi(k); err != nil {
+						fmt.Println(err.Error())
+					} else {
+						s.WriteString(posts[ki-1].String())
+					}
+					if i < len(x)-1 {
+						s.WriteString(",")
+					}
+				}
+				if len(x) > 0 {
+					s.WriteString(" ] }")
+				}
+			}
+		}
+	}
+
+	return s.String()
+}
+
+var ResolveAge = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
+	var (
+		s     strings.Builder
+		scale float32
+	)
+
+	for _, v := range args {
+		if v.Name_.EqualString("ScaleBy") {
+			if x, ok := v.Value.InputValueProvider.(sdl.Float_); ok {
+				if num, err := strconv.ParseFloat(string(x), 32); err != nil {
+					fmt.Println("error ", err.Error())
+				} else {
+					scale = float32(num)
+				}
+			}
+		}
+	}
+
+	resp_ := resp.(sdl.List_)
+
+	var f func(sdl.List_)
+
+	f = func(y sdl.List_) {
+
+		for i := 0; i < len(y); i++ {
+			if x, ok := y[i].InputValueProvider.(sdl.List_); ok {
+				s.WriteString("[")
+				f(x)
+				s.WriteString("]")
+			} else {
+				// optimise by performing loop here rather than use outer for loop
+				for i := 0; i < len(y); i++ {
+					switch x := y[i].InputValueProvider.(type) {
+					case sdl.Float_:
+						if num, err := strconv.ParseFloat(string(x), 32); err != nil {
+							fmt.Println("error ", err.Error())
+						} else {
+							result := scale * float32(num)
+							s.WriteString(strconv.FormatFloat(float64(result), 'f', -1, 32))
+						}
+					case sdl.Int_:
+						if num, err := strconv.Atoi(string(x)); err != nil {
+							fmt.Println("error ", err.Error())
+						} else {
+							result := scale * float32(num)
+							s.WriteString(strconv.FormatFloat(float64(result), 'f', -1, 32))
+						}
+					default:
+						s.WriteString("NoValue")
+					}
+					if i < len(y)-1 {
+						s.WriteString(",")
+					}
+				}
+				break
+			}
+		}
+	}
+	s.WriteString("[") // alternatively, "{age: ["
+	f(resp_)
+	s.WriteString("]") // "]}"
+	return s.String()
+}

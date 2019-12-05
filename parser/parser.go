@@ -1070,7 +1070,6 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 						//
 						// generate AST from response JSON { name: value name: value ... }
 						//
-						responseItems = nil
 						l := lex.New(response)
 						p2 := pse.New(l)
 						responseItems = p2.ParseResponse() // similar to sdl.parseArguments. Populates responseItems with parsed values from response.
@@ -1243,8 +1242,14 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 								//
 								if response.Name.EqualString(rootFld.Name_.String()) { // name
 									resp = response.Value.InputValueProvider
+									break
 								}
 							}
+						}
+						if resp == nil {
+							p.addErr(fmt.Sprintf("No corresponding root field found from response "))
+							p.abort = true
+							return
 						}
 						//
 						// found matching response field
@@ -1414,14 +1419,13 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 							return
 						}
 						// execute resolver using response data for field
-						fmt.Println("Input to resolver:", resp.String())
 						response = qry.Resolver(resp, qry.Arguments)
 						fmt.Println("Response >>>>> ", response)
 
-						errCnt := len(p.perror)
 						// generate  AST from response JSON { name: value name: value ... }
 						l := lex.New(response)
 						p2 := pse.New(l)
+						// scope of responseItems restricted to Section --- DDD --- to hide argument responseItems
 						responseItems := p2.ParseResponse() // similar to sdl.parseArguments
 						fmt.Println("Response >>>>> ", responseItems)
 						if len(p2.Getperror()) > 0 {
@@ -1445,7 +1449,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 								}
 							}
 						default:
-							// developers does not wrap resolver output
+							// developer does not wrap resolver output
 							resp = r
 						}
 						switch riv := resp.(type) {
@@ -1494,31 +1498,13 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 								}
 							}
 							writeout(fieldPath, out, "[ ", noNewLine)
-							fmt.Println("List_ type")
 							f(riv, 1)
 							writeout(fieldPath, out, "] ", noNewLine)
-
+						//
 						// sdl.ObjectVals - represents Objects which is not appropriate in the scalar section
 						//
-						// case sdl.ObjectVals: // type ArgumentS []*ArgumentT  -  represents object with fields
-						// 	fmt.Println("Reponse is a single object")
-						// 	writeout(fieldPath, out, "{", noNewLine)
-
-						// 	for _, v := range riv {
-						// 		fmt.Println("v.Value.InputValueProvider ", v.Value.InputValueProvider.IsType(), fieldPath, root)
-						// 		p.executeStmt_(root, qry.SelectionSet, fieldPath, v.Value.InputValueProvider, out)
-						// 	}
-
-						// 	writeout(fieldPath, out, "}", noNewLine)
 						default:
 							fmt.Printf(" responseItems NOT EITHER %T\n", responseItems)
-						}
-						// TODO: implement validation of response data
-						//responseItems.ValidateResponseValues(rootFld.Type, &p.perror)
-
-						if len(p.perror) > errCnt {
-							p.abort = true
-							return
 						}
 					}
 				}
