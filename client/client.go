@@ -316,3 +316,201 @@ var ResolveAge = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
 	s.WriteString("]") // "]}"
 	return s.String()
 }
+
+type Starship struct {
+	name   string
+	length float32
+}
+
+func (ss Starship) String() string {
+	var s strings.Builder
+
+	s.WriteString(`{ `)
+	s.WriteString(`name: "`)
+	s.WriteString(ss.name)
+	s.WriteString(`"`)
+	s.WriteString(`, length: `)
+	s.WriteString(strconv.FormatFloat(float64(ss.length), 'g', -1, 32))
+	s.WriteString("}")
+	return s.String()
+
+}
+
+var starships []*Starship = []*Starship{
+	&Starship{name: "Falcon", length: 23.4},
+	&Starship{name: "Cruiser", length: 68.2},
+	&Starship{name: "BattleStar", length: 138.2},
+}
+
+type Character struct {
+	i    int
+	id   string
+	name string
+}
+
+func (c Character) String() string {
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("id: %q, name: %q", c.id, c.name))
+	return s.String()
+}
+
+var characters = []*Character{
+	&Character{i: 1, id: "wejnJ3", name: "Han Solo"},
+	&Character{i: 2, id: "xjnJ4", name: "Leia Organa"},
+	&Character{i: 3, id: "sjnJ5", name: "C-3PO"},
+	&Character{i: 4, id: "ksejnJ6", name: "R2-D2"},
+	&Character{i: 5, id: "lwewJ6", name: "Luke Skywalker"},
+}
+
+type Episode string
+
+func (e Episode) String() string {
+	return string(fmt.Sprintf("%s ", string(e)))
+}
+
+var episodes []Episode = []Episode{"NEWHOPE", "EMPIRE", "JEDI"}
+
+type Human struct {
+	i            int
+	id           string
+	name         string
+	friends      []int
+	appearsIn    []int
+	starships    []int
+	totalCredits int
+}
+
+func (h *Human) String() string {
+	var s strings.Builder
+	s.WriteString("{")
+	s.WriteString(`id: "`)
+	s.WriteString(h.id)
+	s.WriteString(`"`)
+	s.WriteString(`, name: "`)
+	s.WriteString(h.name)
+	s.WriteString(`"`)
+	s.WriteString(`, friends: [`)
+	for i, v := range h.friends {
+		s.WriteString("{")
+		s.WriteString(characters[v-1].String())
+		s.WriteString("}")
+		if i < len(h.friends)-1 {
+			s.WriteString(`,`)
+		}
+	}
+	s.WriteString(`]`)
+	s.WriteString(`, appearsIn: [`)
+	for i, v := range h.appearsIn {
+		s.WriteString(episodes[v].String())
+		if i < len(h.appearsIn)-1 {
+			s.WriteString(`,`)
+		}
+	}
+	s.WriteString(`]`)
+	s.WriteString(`, starships: [`)
+	for i, v := range h.starships {
+		s.WriteString(starships[v-1].String())
+		if i < len(h.starships)-1 {
+			s.WriteString(`,`)
+		}
+	}
+	s.WriteString(`] `)
+	s.WriteString(", totalCredits: ")
+	s.WriteString(strconv.Itoa(h.totalCredits))
+	s.WriteString(" }")
+	return s.String()
+}
+
+type Droid struct {
+	i               int
+	id              string
+	name            string
+	friends         []int
+	appearsIn       []int
+	primaryFunction string
+}
+
+func (d *Droid) String() string {
+	var s strings.Builder
+	s.WriteString("{")
+	s.WriteString(`id: "`)
+	s.WriteString(d.id)
+	s.WriteString(`"`)
+	s.WriteString(`,name: "`)
+	s.WriteString(d.name)
+	s.WriteString(`"`)
+	s.WriteString(`, friends: [`)
+	for i, v := range d.friends {
+		characters[v-1].String()
+		if i < len(d.friends)-1 {
+			s.WriteString(`,`)
+		}
+	}
+	s.WriteString(`]`)
+	s.WriteString(`, appearsIn: [`)
+	for i, v := range d.appearsIn {
+		episodes[v].String()
+		if i < len(d.appearsIn)-1 {
+			s.WriteString(`,`)
+		}
+	}
+	s.WriteString(`, primaryFunction : `)
+	s.WriteString(d.primaryFunction)
+	s.WriteString("}")
+	return s.String()
+}
+
+// type Query {
+//   hero(episode: Episode): Character
+//   droid(id: ID!): Droid
+// }
+
+var humans = []*Human{
+	&Human{i: 1, id: "jklw2ike", name: "Luke Skywalker", friends: []int{2, 3, 4}, appearsIn: []int{0, 2}, starships: []int{1, 2}, totalCredits: 5532},
+	&Human{i: 2, id: "dfw23e", name: "Leia Organa", friends: []int{5, 3, 4}, appearsIn: []int{0, 1}, starships: []int{3}, totalCredits: 2532},
+}
+
+var droid = []*Droid{
+	&Droid{i: 1, id: "Ljeiike", name: "C-3PO", friends: []int{2, 3, 4}, appearsIn: []int{0, 1, 2}, primaryFunction: "Diplomat"},
+	&Droid{i: 2, id: "ewxdfw23e", name: "R2-D2", friends: []int{5, 3, 4}, appearsIn: []int{0, 1, 2}, primaryFunction: "Multifunction"},
+}
+
+var ResolverHero = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
+	var (
+		episode string
+		index   int
+		s       strings.Builder
+	)
+
+	for _, v := range args {
+
+		if v.Name_.EqualString("episode") {
+			if x, ok := v.Value.InputValueProvider.(*sdl.EnumValue_); ok {
+				episode = x.String()
+			}
+		}
+	}
+	for i, v := range episodes {
+		if strings.ToUpper(episode) == string(v) {
+			index = i
+		}
+	}
+	//	s.WriteString("[" + fmt.Sprintf("%d", index) + " " + episode)
+
+	s.WriteString("[")
+
+	for _, v := range humans {
+		var found bool
+		for _, k := range v.appearsIn {
+			if k == index {
+				found = true
+			}
+		}
+		if found {
+			s.WriteString(v.String())
+			s.WriteString(",")
+		}
+	}
+	s.WriteString("]")
+	return s.String()
+}

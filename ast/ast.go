@@ -34,16 +34,27 @@ func (sc *Scalar_) Exists() bool {
 
 // ======== Document =================================================================
 
+const (
+	OPERATION byte = iota
+	FRAGMENT
+)
+
+type Statement struct {
+	Type    string // Operational | Fragment
+	AST     StatementDef
+	RootAST sdl.GQLTypeProvider
+}
 type Document struct {
-	Statements []StatementDef
+	//Statements []StatementDef
+	Statements []*Statement
 }
 
 func (d Document) String() string {
 	var s strings.Builder
 	tc = 2
 
-	for _, iv := range d.Statements {
-		s.WriteString(iv.String())
+	for _, stmt := range d.Statements {
+		s.WriteString(stmt.AST.String())
 	}
 	return s.String()
 }
@@ -59,7 +70,7 @@ type HasSelectionSetI interface {
 type SelectionSetI interface {
 	SelectionSetNode()
 	checkUnresolvedTypes_(unresolved sdl.UnresolvedMap)
-	Resolve()
+	//	Resolve()
 	String() string
 }
 
@@ -97,6 +108,7 @@ type OperationDef interface {
 
 type FragmentDef interface {
 	FragmentNode()
+	GetSelectionSet() []SelectionSetI
 	AssignTypeCond(string, *sdl.Loc_, *[]error)
 	//	Executable
 }
@@ -133,7 +145,7 @@ type OperationStmt struct {
 	Name     sdl.Name_ // validated
 	Variable []*VariableDef
 	sdl.Directives_
-	SelectionSet []SelectionSetI // { selection-List: fields,...,SelectionSet }
+	SelectionSet []SelectionSetI // { selection-List: fields,... }
 }
 
 func (o *OperationStmt) StatementNode() {} // validates type is appropriate during load into ast struct
@@ -199,6 +211,9 @@ func (o *OperationStmt) String() string { // Query will now satisfy Node interfa
 }
 
 func (o *OperationStmt) CheckUnresolvedTypes(unresolved sdl.UnresolvedMap) {
+	// statements can have two entities that are unresolved.
+	//  either a type (SDL) or a fragment (statement). However SDL are only checked during checkField function.
+	// check any unresolved fragments
 	for _, v := range o.Variable {
 		v.checkUnresolvedTypes_(unresolved)
 	}
@@ -225,7 +240,7 @@ type FragmentStmt struct {
 	// on <type>
 	TypeCond sdl.Name_
 	sdl.Directives_
-	SelectionSet []SelectionSetI // { only fields and ... fragments
+	SelectionSet []SelectionSetI // inline fragments, fragment spreads, sdl field from sdl type TypeCond.
 }
 
 func (f *FragmentStmt) StatementNode() {} // validates type is appropriate during load into ast struct
@@ -239,7 +254,7 @@ func (f *FragmentStmt) GetSelectionSet() []SelectionSetI {
 func (f *FragmentStmt) AppendSelectionSet(ss SelectionSetI) {
 	// usual suspects for SS
 	//	Selection :
-	//		Field
+	//		Field from TypeCond type
 	//		FragmentSpread
 	//		InlineFragment
 	f.SelectionSet = append(f.SelectionSet, ss)
@@ -283,11 +298,22 @@ func (f *FragmentStmt) String() string { // Query will now satisfy Node interfac
 
 func (f *FragmentStmt) CheckUnresolvedTypes(unresolved sdl.UnresolvedMap) {
 
+	// type Type_ struct {
+	// 	Constraint byte            // each on bit from right represents not-null constraint applied e.g. in nested list type [type]! is 00000010, [type!]! is 00000011, type! 00000001
+	// 	AST        GQLTypeProvider // AST instance of type. WHen would this be used??. Used for non-Scalar types. AST in cache(typeName), then in Type_(typeName). If not in Type_, check cache, then DB.
+	// 	Depth      int             // depth of nested List e.g. depth 2 is [[type]]. Depth 0 implies non-list type, depth > 0 is a list type
+	// 	Name_                      // type name. inherit AssignName(). Use Name_ to access AST via cache lookup. ALternatively, use AST above or TypeFlag_ instead of string.
+	// }
+	if _, ok := sdl.CacheFetch(f.TypeCond.Name); !ok {
+		ty := sdl.Type_{Name_: f.TypeCond}
+		unresolved[f.TypeCond] = &ty
+	}
 	f.Directives_.CheckUnresolvedTypes(unresolved)
 	for _, v := range f.SelectionSet {
 		v.checkUnresolvedTypes_(unresolved)
 	}
 }
+
 func (f *FragmentStmt) StmtName() StmtName_ {
 	return StmtName_(f.Name.String())
 }
@@ -298,24 +324,25 @@ var tc = 2
 
 // Fragment Spread - consumes Fragment Statements.
 
-type FragementSpread struct {
-	Name    sdl.Name_     // AST only contains reference to Fragment. At evaluation time it will be expanded to its enclosed fields.
-	FragDef *FragmentStmt // or use the cache to find the statement based on Name.
+type FragmentSpread struct {
+	sdl.Name_               // AST only contains reference to Fragment. At evaluation time it will be expanded to its enclosed fields.
+	FragStmt  *FragmentStmt // associated fragment statement
 	//	SelectionSet []SelectionSetI // expanded results are added here - no do not include this. Name is reference to Fragment Statement object
 }
 
-func (f *FragementSpread) SelectionSetNode()                                  {}
-func (f *FragementSpread) Resolve()                                           {}
-func (f *FragementSpread) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {} // TODO - do we want to add Name to unresolved to check that its associated with a actual Fragment Statement
+func (f *FragmentSpread) SelectionSetNode() {}
+
+//func (f *FragmentSpread) Resolve()                                           {}
+func (f *FragmentSpread) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {} // TODO - do we want to add Name to unresolved to check that its associated with a actual Fragment Statement
 
 //func (f *FragementSpread) ExecutableDefinition() {}
 
-func (f *FragementSpread) AssignName(input string, loc *sdl.Loc_, err *[]error) {
+func (f *FragmentSpread) AssignName(input string, loc *sdl.Loc_, err *[]error) {
 	sdl.ValidateName(input, err, loc)
-	f.Name = sdl.Name_{Name: sdl.NameValue_(input), Loc: loc}
+	f.Name_ = sdl.Name_{Name: sdl.NameValue_(input), Loc: loc}
 }
 
-func (f *FragementSpread) String() string {
+func (f *FragmentSpread) String() string {
 	var s strings.Builder
 	s.WriteString("\n")
 	for i := tc; i > 0; i-- {
@@ -338,8 +365,9 @@ type InlineFragment struct {
 }
 
 func (f *InlineFragment) SelectionSetNode() {}
-func (f *InlineFragment) Resolve()          {}
-func (f *InlineFragment) FragmentNode()     {}
+
+//func (f *InlineFragment) Resolve()          {}
+func (f *InlineFragment) FragmentNode() {}
 func (f *InlineFragment) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {
 	if f.TypeCond.Exists() {
 		unresolved[sdl.Name_(f.TypeCond)] = nil
@@ -363,6 +391,10 @@ func (f *InlineFragment) AppendSelectionSet(ss SelectionSetI) {
 func (f *InlineFragment) AssignTypeCond(input string, loc *sdl.Loc_, err *[]error) {
 	sdl.ValidateName(input, err, loc)
 	f.TypeCond = sdl.Name_{Name: sdl.NameValue_(input), Loc: loc}
+}
+
+func (f *InlineFragment) GetSelectionSet() []SelectionSetI {
+	return f.SelectionSet
 }
 
 func (f *InlineFragment) String() string { // Query will now satisfy Node interface and complete StatementDef
@@ -425,15 +457,19 @@ type Field struct {
 	//Type  int // Fragment, InlineFragment, Field
 	Alias sdl.Name_
 	Name  sdl.Name_ // must have atleast a name - all else can be empty
-	Path  string    // path to field in statement
+	//	Type      *sdl.Type_          // populated during checkField
+	ParentObj sdl.GQLTypeProvider // Parent type, populated during checkField
+	ParentFld *sdl.Field_         // matching field in parent object
+	Path      string              // path to field in statement
 	sdl.Arguments_
 	sdl.Directives_
-	SelectionSet []SelectionSetI                                              //an Field whose type is an object will contain a SS. For scalars SS wll be nil
-	Resolver     func(obj sdl.InputValueProvider, args sdl.ObjectVals) string // fieldResolver //, info QLInfo)
+	SelectionSet []SelectionSetI //an Field whose type is an object within the parent type to which field belongs. For scalars SS wll be nil
+	Resolver     func(obj sdl.InputValueProvider, args sdl.ObjectVals) string
 }
 
 func (f *Field) SelectionSetNode() {}
-func (f *Field) Resolve()          {}
+
+//func (f *Field) Resolve()          {}
 
 //func (f *Field) ExecutableDefinition() {} // removed as Field is not a statement
 
@@ -442,10 +478,25 @@ func (f *Field) AppendSelectionSet(ss SelectionSetI) {
 }
 
 func (f *Field) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {
+	// get type of the field
+	// TODO need to have type name associated with this field either in Field struct or passed into checkUnresolvedType
+	//      also sdl.CacheFetch need type name passed in not field name
+	//      CANNOT resolve field Type as it is not known at this point (populated during checkField which will then resolve the type)
+	// if len(SelectionSet) != 0 { // non-Scalar type
+	// 	if t,ok := sdl.CacheFetch(f.Name.Name); !ok {
+	// 		unresolved[]
+	// 	}
 	f.Directives_.CheckUnresolvedTypes(unresolved)
 	for _, v := range f.SelectionSet {
 		v.checkUnresolvedTypes_(unresolved)
 	}
+}
+
+func (f *Field) GenNameAliasPath() string {
+	if f.Alias.Exists() {
+		return f.Name.String() + "(" + f.Alias.String() + ")"
+	}
+	return f.Name.String()
 }
 
 // func (f *Field) checkInputValueType(reftype *sdl.Type, argName sdlName_, err *[]error) {

@@ -76,17 +76,19 @@ func CacheClear() {
 	fmt.Println("******************************************")
 	stmtCache_ = map[StmtName_]StatementDef{} // map literal to zero cache
 }
-func CacheFetch(input StmtName_) (StatementDef, bool) { // TODO: use StatementDef instead of StatementDef?
-	fmt.Printf("** CacheFetch [%s]\n", input)
+func CacheFetchStmt(input StmtName_) (StatementDef, bool) {
+
 	if ast, ok := stmtCache_[input]; !ok {
+		fmt.Printf("** QL CacheFetchStmt [%s] NOT FOUND \n", input)
 		return nil, false
 	} else {
+		fmt.Printf("** QL CacheFetchStmt [%s] found \n", input)
 		return ast, true
 	}
 }
 
-func Add2Cache(input StmtName_, obj StatementDef) {
-	fmt.Printf("** Add2Cache  %s [%s]\n", input, obj.String())
+func Add2StmtCache(input StmtName_, obj StatementDef) {
+	fmt.Printf("** Add2Cache  x%sx [%s]\n", input, obj.String())
 	stmtCache_[input] = obj
 }
 
