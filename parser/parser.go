@@ -774,10 +774,24 @@ func (p *Parser) executeStmt(stmt_ *ast.Statement) {
 
 	wg.Wait()
 
+	var ts strings.Builder
 	fmt.Println("==== output ====== ")
-	for i, _ := range stmt.SelectionSet {
-		fmt.Println(out[i].String())
+	if len(stmt.SelectionSet) > 1 {
+		ts.WriteString(" { data : [ ")
+	} else {
+		ts.WriteString("\n{\ndata: {")
 	}
+
+	for i, _ := range stmt.SelectionSet {
+		ts.WriteString(out[i].String())
+	}
+	if len(stmt.SelectionSet) > 1 {
+		ts.WriteString(" \n ] } ")
+	} else {
+		ts.WriteString("\n}\n}")
+	}
+	println(ts.String())
+
 }
 
 func (p *Parser) executeStmtOp(root sdl.GQLTypeProvider, qryFld ast.SelectionSetI, pathRoot string, responseItems sdl.InputValueProvider, out *strings.Builder, wg *sync.WaitGroup) {
@@ -915,31 +929,9 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 	if p.hasError() {
 		return
 	}
-	// fmt.Printf("set: %T %d \n", set, len(set))
-	// for _, v := range set {
-	// 	switch x := v.(type) {
-	// 	case *ast.FragmentSpread:
-	// 		fmt.Println("", x.Name)
-	// 	case *ast.Field:
-	// 		fmt.Println("Field..", x.Name)
-	// 	}
-	// }
-	//rootObj := root.(sdl.SelectionGetter)
-	//	scan selection set passed in.  Order of search, Query Field match with Root field match with Response field (all matching based on Name attribute)
-	//	var qryFldi int
-	for _, qryFld := range set {
-		// qryFldi = i
 
-		// if strings.IndexByte(pathRoot, '/') == -1 { // at root of query
-		// 	responseItems = nil
-		// 	if i == 0 {
-		// 		if len(set) > 1 {
-		// 			out.WriteString("\n{ data:[ ")
-		// 		} else {
-		// 			out.WriteString("\n{ data: ")
-		// 		}
-		// 	}
-		// }
+	for _, qryFld := range set {
+
 		switch qry := qryFld.(type) {
 
 		case *ast.Field:
@@ -1723,16 +1715,6 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 			}
 		}
 	}
-	//
-	// if strings.IndexByte(pathRoot, '/') == -1 { // At beginning of operational statement
-	// 	if qryFldi == len(set)-1 {
-	// 		if len(set) > 1 {
-	// 			out.WriteString(" \n ] } ")
-	// 		} else {
-	// 			out.WriteString("\n}\n}")
-	// 		}
-	// 	}
-	// }
 
 }
 
