@@ -77,9 +77,9 @@ fragment comparisonFields on Character {
 func TestFragmentNotExists(t *testing.T) {
 
 	var input = `query {
-  #leftComparison: hero(episode: EMPIRE) {
-  #  ...comparisonFields
-  #}
+  leftComparison: hero(episode: EMPIRE) {
+    ...comparisonFields
+  }
   rightComparison: hero(episode: JEDI) {
     ...comparisonFields2
   }

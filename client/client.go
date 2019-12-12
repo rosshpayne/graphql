@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	sdl "github.com/graph-sdl/ast"
 )
@@ -365,6 +366,7 @@ var characters = []*Character{
 type Episode string
 
 func (e Episode) String() string {
+	// eval input type - so not quoted values
 	return string(fmt.Sprintf("%s ", string(e)))
 }
 
@@ -512,5 +514,6 @@ var ResolverHero = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string
 		}
 	}
 	s.WriteString("]")
+	time.Sleep(1500 * time.Millisecond)
 	return s.String()
 }

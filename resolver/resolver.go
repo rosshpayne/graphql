@@ -33,12 +33,10 @@ func (r Resolvers) Register(path string, f ResolverFunc, override ...bool) error
 	pathField = ResolverPath(path)
 
 	if _, ok := r.resolverMap[pathField]; !ok {
-		fmt.Println("Register ", pathField)
 		r.resolverMap[pathField] = f
 		return nil
 	}
 	if len(override) > 0 && override[0] {
-		fmt.Println("Register ", pathField)
 		r.resolverMap[pathField] = f
 		return nil
 	}

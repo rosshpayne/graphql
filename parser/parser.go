@@ -5,6 +5,7 @@ import (
 	"fmt"
 	_ "os"
 	"strings"
+	"sync"
 
 	sdl "github.com/graph-sdl/ast"
 	lex "github.com/graph-sdl/lexer"
@@ -748,7 +749,8 @@ func (p *Parser) executeStmt(stmt_ *ast.Statement) {
 	var (
 		stmt *ast.OperationStmt
 		ok   bool
-		out  strings.Builder
+		out  []strings.Builder
+		wg   sync.WaitGroup
 	)
 	var ()
 	if stmt, ok = stmt_.AST.(*ast.OperationStmt); !ok {
@@ -760,18 +762,29 @@ func (p *Parser) executeStmt(stmt_ *ast.Statement) {
 		p.addErr(fmt.Sprintf("Expected an Query OperationStmt in execute phase. Aborting. "))
 		return
 	}
+	fmt.Println("UUU len(stmt.SelectionSet)  ", len(stmt.SelectionSet))
+	wg.Add(len(stmt.SelectionSet))
+	out = make([]strings.Builder, len(stmt.SelectionSet))
 
 	root := stmt_.RootAST
-	fmt.Println("Len(selectset) = ", len(stmt.SelectionSet), string(root.TypeName()))
+	for i, opFld := range stmt.SelectionSet {
+		opFld := opFld
+		go p.executeStmtOp(root, opFld, string(root.TypeName()), nil, &out[i], &wg)
+	}
 
-	p.executeStmt_(root, stmt.SelectionSet, string(root.TypeName()), nil, &out)
+	wg.Wait()
 
 	fmt.Println("==== output ====== ")
-	fmt.Println(out.String())
+	for i, _ := range stmt.SelectionSet {
+		fmt.Println(out[i].String())
+	}
 }
 
-//type responseProvider sdl.InputValueProvider
-
+func (p *Parser) executeStmtOp(root sdl.GQLTypeProvider, qryFld ast.SelectionSetI, pathRoot string, responseItems sdl.InputValueProvider, out *strings.Builder, wg *sync.WaitGroup) {
+	var set = []ast.SelectionSetI{qryFld}
+	p.executeStmt_(root, set, pathRoot, nil, out)
+	wg.Done()
+}
 func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI, pathRoot string, responseItems sdl.InputValueProvider, out *strings.Builder) { //type ObjectVals []*ArgumentT - serialized object
 	//func (p *Parser) executeStmt_(root sdl.FieldSetter, set []ast.SelectionSetI, pathRoot string, responseItems sdl.InputValueProvider, out *strings.Builder) { //type ObjectVals []*ArgumentT - serialized object
 	// ty_ (object):  type Query { allPersons(last : Int ) : [Person!]! }	<== root (type information)
@@ -912,23 +925,21 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 	// 	}
 	// }
 	//rootObj := root.(sdl.SelectionGetter)
-	// scan selection set passed in.  Order of search, Query Field match with Root field match with Response field (all matching based on Name attribute)
-	fmt.Println("================= EXECUTE =================", pathRoot)
-	var ii int
-	for i, qryFld := range set {
-		ii = i
-		fmt.Println("==== ", len(set), qryFld.String())
+	//	scan selection set passed in.  Order of search, Query Field match with Root field match with Response field (all matching based on Name attribute)
+	//	var qryFldi int
+	for _, qryFld := range set {
+		// qryFldi = i
 
-		if pathRoot == "Query" { //TODO  - make root based currently using fixed value
-			responseItems = nil
-			if i == 0 {
-				if len(set) > 1 {
-					out.WriteString("\n{ data:[ ")
-				} else {
-					out.WriteString("\n{ data: ")
-				}
-			}
-		}
+		// if strings.IndexByte(pathRoot, '/') == -1 { // at root of query
+		// 	responseItems = nil
+		// 	if i == 0 {
+		// 		if len(set) > 1 {
+		// 			out.WriteString("\n{ data:[ ")
+		// 		} else {
+		// 			out.WriteString("\n{ data: ")
+		// 		}
+		// 	}
+		// }
 		switch qry := qryFld.(type) {
 
 		case *ast.Field:
@@ -1449,19 +1460,20 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 									}
 									// optimise by performing loop here rather than use outer for loop
 									for i := 0; i < len(y); i++ {
-										// for scalar only Type.Name contains the scalar type name i.e. Int, Float, Boolean etc
-										fmt.Println("y[i].IsType().String() != rootFld.Type.Name.String()  ", y[i].IsType().String(), rootFld.Type.Name.String())
-										// if y[i].IsType().String() != rootFld.Type.Name.String() {
-										// 	if _, ok := y[i].InputValueProvider.(sdl.Null_); !ok {
-										// 		p.addErr(fmt.Sprintf(`55 Expected "%s" got %s for "%s" %s`, rootFld.Type.Name_.String(), y[i].IsType(), qry.Name, qry.Name.AtPosition()))
-										// 	} else {
-										// 		var bit byte = 1
-										// 		bit &= rootFld.Type.Constraint >> uint(d)
-										// 		if bit == 1 {
-										// 			p.addErr(fmt.Sprintf(`Expected non-null got null for "%s" %s`, qry.Name, qry.Name.AtPosition()))
-										// 		}
-										// 	}
-										// }
+										// for scalar only Type.Name contains the scalar type name i.e. Int, Float, Boolean etc. For ENUM and Scalar types, Name does not identify type, use BaseType, passing in the type AST.
+										if y[i].IsType().String() != rootFld.Type.Name.String() {
+											if !(y[i].IsType().String() == "Enum" && sdl.BaseType(rootFld.Type.AST) == "E") {
+												if _, ok := y[i].InputValueProvider.(sdl.Null_); !ok {
+													p.addErr(fmt.Sprintf(`55 Expected "%s" got %s for "%s" %s`, rootFld.Type.Name_.String(), y[i].IsType(), qry.Name, qry.Name.AtPosition()))
+												} else {
+													var bit byte = 1
+													bit &= rootFld.Type.Constraint >> uint(d)
+													if bit == 1 {
+														p.addErr(fmt.Sprintf(`Expected non-null got null for "%s" %s`, qry.Name, qry.Name.AtPosition()))
+													}
+												}
+											}
+										}
 										writeout(fieldPath, out, y[i].String(), noNewLine)
 									}
 									break
@@ -1653,6 +1665,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 		case *ast.FragmentSpread:
 
 			fmt.Println("FRAGMENT SPREAD.........")
+			//TODO - process directives.
 			p.executeStmt_(root, qry.FragStmt.SelectionSet, pathRoot, responseItems, out)
 
 		case *ast.InlineFragment:
@@ -1710,15 +1723,16 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 			}
 		}
 	}
-	if pathRoot == "Query" { //TODO  - make root based currently using fixed value
-		if ii == len(set)-1 {
-			if len(set) > 1 {
-				out.WriteString(" \n ] } ")
-			} else {
-				out.WriteString("\n}\n}")
-			}
-		}
-	}
+	//
+	// if strings.IndexByte(pathRoot, '/') == -1 { // At beginning of operational statement
+	// 	if qryFldi == len(set)-1 {
+	// 		if len(set) > 1 {
+	// 			out.WriteString(" \n ] } ")
+	// 		} else {
+	// 			out.WriteString("\n}\n}")
+	// 		}
+	// 	}
+	// }
 
 }
 
