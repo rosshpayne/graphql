@@ -323,10 +323,13 @@ var tc = 2
 // =============== SelectionSet Types =====================
 
 // Fragment Spread - consumes Fragment Statements.
+// FragmentSpread
+// ...FragmentName  Directives-opt
 
 type FragmentSpread struct {
-	sdl.Name_               // AST only contains reference to Fragment. At evaluation time it will be expanded to its enclosed fields.
-	FragStmt  *FragmentStmt // associated fragment statement
+	sdl.Name_ // AST only contains reference to Fragment. At evaluation time it will be expanded to its enclosed fields.
+	sdl.Directives_
+	FragStmt *FragmentStmt // associated fragment statement
 	//	SelectionSet []SelectionSetI // expanded results are added here - no do not include this. Name is reference to Fragment Statement object
 }
 

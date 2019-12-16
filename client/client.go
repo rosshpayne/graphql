@@ -499,7 +499,8 @@ var ResolverHero = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string
 	}
 	//	s.WriteString("[" + fmt.Sprintf("%d", index) + " " + episode)
 
-	s.WriteString("[")
+	//s.WriteString("{Droid:  [")
+	s.WriteString("{Human:  [") // becomes respType in parser executeStmt_(). When type of response is an Interface then "on Human" & "on Droid" will use respType to determine which to use.
 
 	for _, v := range humans {
 		var found bool
@@ -513,7 +514,7 @@ var ResolverHero = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string
 			s.WriteString(",")
 		}
 	}
-	s.WriteString("]")
-	time.Sleep(1500 * time.Millisecond)
+	s.WriteString("] }")
+	time.Sleep(750 * time.Millisecond)
 	return s.String()
 }

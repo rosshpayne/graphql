@@ -11,17 +11,240 @@ import (
 func TestFragmentx(t *testing.T) {
 
 	var input = `query {
-  leftComparison: hero(episode: NEWHOPE) {
-    ...comparisonFields
-  }
-  rightComparison: hero(episode: EMPIRE ) {
-    ...comparisonFields
-  }
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
 	}
 
 fragment comparisonFields on Character {
   name
-  appearsIn
+  friends {
+    name
+  }
+}
+
+`
+
+	var expectedErr [1]string
+	expectedErr[0] = ``
+
+	l := lexer.New(input)
+	p := New(l)
+
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
+		p.addErr(err.Error())
+	}
+	//	p.ClearCache()
+	p.SetDocument("DefaultDoc")
+	d, errs := p.ParseDocument()
+	fmt.Println(d.String())
+	for _, ex := range expectedErr {
+		if len(ex) == 0 {
+			break
+		}
+		found := false
+		for _, err := range errs {
+			if trimWS(err.Error()) == trimWS(ex) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Expected Error = [%q]`, ex)
+		}
+	}
+	for _, got := range errs {
+		found := false
+		for _, exp := range expectedErr {
+			if trimWS(got.Error()) == trimWS(exp) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Unexpected Error = [%q]`, got.Error())
+		}
+	}
+	if compare(d.String(), input) {
+		t.Errorf("Got:      [%s] \n", trimWS(d.String()))
+		t.Errorf("Expected: [%s] \n", trimWS(input))
+		t.Errorf(`Unexpected: program.String() wrong. `)
+	}
+}
+
+func TestFragmentNested(t *testing.T) {
+
+	var input = `query {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+
+fragment nestedField2 on Character {
+	name
+}
+fragment nestedField1 on Character {
+	appearsIn
+}
+fragment comparisonFields on Character {
+  ...nestedField1
+  friends {
+    name
+  }
+  ...nestedField2
+}
+`
+
+	var expectedErr [1]string
+	expectedErr[0] = ``
+
+	l := lexer.New(input)
+	p := New(l)
+
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
+		p.addErr(err.Error())
+	}
+	//	p.ClearCache()
+	p.SetDocument("DefaultDoc")
+	d, errs := p.ParseDocument()
+	fmt.Println(d.String())
+	for _, ex := range expectedErr {
+		if len(ex) == 0 {
+			break
+		}
+		found := false
+		for _, err := range errs {
+			if trimWS(err.Error()) == trimWS(ex) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Expected Error = [%q]`, ex)
+		}
+	}
+	for _, got := range errs {
+		found := false
+		for _, exp := range expectedErr {
+			if trimWS(got.Error()) == trimWS(exp) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Unexpected Error = [%q]`, got.Error())
+		}
+	}
+	if compare(d.String(), input) {
+		t.Errorf("Got:      [%s] \n", trimWS(d.String()))
+		t.Errorf("Expected: [%s] \n", trimWS(input))
+		t.Errorf(`Unexpected: program.String() wrong. `)
+	}
+}
+
+func TestFragmentDirectives(t *testing.T) {
+
+	var input = `query ($expandedInfo: Boolean = true) {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields								# fragment spread no directives
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ... @include(if: $expandedInfo)					# inlinefragment (ie. no fragment name) with directive
+	    	...comparisonFields
+	    	appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields @include(if: $expandedInfo) # fragment spread with directive (can be different to directives in fragment statement)
+	  }
+	  lowerComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields @include(if: $expandedInfo)	# fragment spread with directive
+	  }
+	}
+
+fragment nestedField2 on Character {
+	name
+}
+fragment nestedField1 on Character @include(if: $expandedInfo) {	# fragment stmt with directive 
+	appearsIn
+}
+fragment comparisonFields on Character {							# fragment stmt no directives
+  ...nestedField1
+  friends {
+    name
+  }
+  ...nestedField2
+}
+`
+
+	var expectedErr [1]string
+	expectedErr[0] = ``
+
+	l := lexer.New(input)
+	p := New(l)
+
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
+		p.addErr(err.Error())
+	}
+	//	p.ClearCache()
+	p.SetDocument("DefaultDoc")
+	d, errs := p.ParseDocument()
+	fmt.Println(d.String())
+	for _, ex := range expectedErr {
+		if len(ex) == 0 {
+			break
+		}
+		found := false
+		for _, err := range errs {
+			if trimWS(err.Error()) == trimWS(ex) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Expected Error = [%q]`, ex)
+		}
+	}
+	for _, got := range errs {
+		found := false
+		for _, exp := range expectedErr {
+			if trimWS(got.Error()) == trimWS(exp) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Unexpected Error = [%q]`, got.Error())
+		}
+	}
+	if compare(d.String(), input) {
+		t.Errorf("Got:      [%s] \n", trimWS(d.String()))
+		t.Errorf("Expected: [%s] \n", trimWS(input))
+		t.Errorf(`Unexpected: program.String() wrong. `)
+	}
+}
+
+func TestFragmentChangeFieldOrder(t *testing.T) {
+
+	var input = `query {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	            appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+
+fragment comparisonFields on Character {
+  name
   friends {
     name
   }
@@ -77,12 +300,12 @@ fragment comparisonFields on Character {
 func TestFragmentNotExists(t *testing.T) {
 
 	var input = `query {
-  leftComparison: hero(episode: EMPIRE) {
-    ...comparisonFields
-  }
-  rightComparison: hero(episode: JEDI) {
-    ...comparisonFields2
-  }
+	  leftComparison: hero(episode: EMPIRE) {
+	    ...comparisonFields
+	  }
+	  rightComparison: hero(episode: JEDI) {
+	    ...comparisonFields2
+	  }
 	}
 
 fragment comparisonFields on Character {
