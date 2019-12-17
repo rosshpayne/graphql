@@ -63,11 +63,16 @@ func (d Document) String() string {
 
 // these are the ast structures that have a selectionset collection, which
 // maybe different to the objects contained in the selectionset
-type HasSelectionSetI interface {
-	AppendSelectionSet(ss SelectionSetI) // TODO - this method may not be appropriate for this interface.
+type HasSelectionSetProvider interface {
+	AppendSelectionSet(ss SelectionSetProvider) // TODO - this method may not be appropriate for this interface.
 }
 
-type SelectionSetI interface {
+// SelectionSetProvider can be
+//   Field
+//   FragmentSpread
+//	 InlineFragment
+
+type SelectionSetProvider interface {
 	SelectionSetNode()
 	checkUnresolvedTypes_(unresolved sdl.UnresolvedMap)
 	//	Resolve()
@@ -108,7 +113,7 @@ type OperationDef interface {
 
 type FragmentDef interface {
 	FragmentNode()
-	GetSelectionSet() []SelectionSetI
+	GetSelectionSet() []SelectionSetProvider
 	AssignTypeCond(string, *sdl.Loc_, *[]error)
 	//	Executable
 }
@@ -138,14 +143,14 @@ type FragmentDef interface {
 
 type OperationStmt struct {
 	//
-	Type string // query, mutation, subscription	SelectionSet []SelectionSetI // { only fields and ... fragments
+	Type string // query, mutation, subscription	SelectionSet []SelectionSetProvider // { only fields and ... fragments
 	//
 	//NodeDef // partially implements Node interface - concrete type must assign its own String method
 	//
 	Name     sdl.Name_ // validated
 	Variable []*VariableDef
 	sdl.Directives_
-	SelectionSet []SelectionSetI // { selection-List: fields,... }
+	SelectionSet []SelectionSetProvider // { selection-List: fields,... }
 }
 
 func (o *OperationStmt) StatementNode() {} // validates type is appropriate during load into ast struct
@@ -156,11 +161,11 @@ func (o *OperationStmt) AssignName(input string, loc *sdl.Loc_, err *[]error) {
 	o.Name = sdl.Name_{Name: sdl.NameValue_(input), Loc: loc}
 }
 
-func (o *OperationStmt) GetSelectionSet() []SelectionSetI {
+func (o *OperationStmt) GetSelectionSet() []SelectionSetProvider {
 	return o.SelectionSet
 }
 
-func (o *OperationStmt) AppendSelectionSet(ss SelectionSetI) {
+func (o *OperationStmt) AppendSelectionSet(ss SelectionSetProvider) {
 	o.SelectionSet = append(o.SelectionSet, ss)
 }
 
@@ -240,7 +245,7 @@ type FragmentStmt struct {
 	// on <type>
 	TypeCond sdl.Name_
 	sdl.Directives_
-	SelectionSet []SelectionSetI // inline fragments, fragment spreads, sdl field from sdl type TypeCond.
+	SelectionSet []SelectionSetProvider // inline fragments, fragment spreads, sdl field from sdl type TypeCond.
 }
 
 func (f *FragmentStmt) StatementNode() {} // validates type is appropriate during load into ast struct
@@ -248,10 +253,11 @@ func (f *FragmentStmt) FragmentNode()  {} // validates type is appropriate durin
 //func (f *FragmentStmt) ExecutableDefinition() {}
 func (f *FragmentStmt) CheckInputValueType(err *[]error) {}
 
-func (f *FragmentStmt) GetSelectionSet() []SelectionSetI {
+func (f *FragmentStmt) GetSelectionSet() []SelectionSetProvider {
 	return f.SelectionSet
 }
-func (f *FragmentStmt) AppendSelectionSet(ss SelectionSetI) {
+
+func (f *FragmentStmt) AppendSelectionSet(ss SelectionSetProvider) {
 	// usual suspects for SS
 	//	Selection :
 	//		Field from TypeCond type
@@ -330,7 +336,7 @@ type FragmentSpread struct {
 	sdl.Name_ // AST only contains reference to Fragment. At evaluation time it will be expanded to its enclosed fields.
 	sdl.Directives_
 	FragStmt *FragmentStmt // associated fragment statement
-	//	SelectionSet []SelectionSetI // expanded results are added here - no do not include this. Name is reference to Fragment Statement object
+	//	SelectionSet []SelectionSetProvider // expanded results are added here - no do not include this. Name is reference to Fragment Statement object
 }
 
 func (f *FragmentSpread) SelectionSetNode() {}
@@ -360,11 +366,11 @@ func (f *FragmentSpread) String() string {
 
 type InlineFragment struct {
 	//
-	Parent   HasSelectionSetI
+	Parent   HasSelectionSetProvider
 	TypeCond sdl.Name_ // supplied by typeCondition if specified, otherwise its the type of the parent object's selectionset.
 	//
 	sdl.Directives_
-	SelectionSet []SelectionSetI // { only fields and ... fragments
+	SelectionSet []SelectionSetProvider // { only fields and ... fragments. Nil when no TypeCond and adopts selectionSet of enclosing context.
 }
 
 func (f *InlineFragment) SelectionSetNode() {}
@@ -382,7 +388,7 @@ func (f *InlineFragment) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {
 
 //func (f *InlineFragment) ExecutableDefinition() {}
 
-func (f *InlineFragment) AppendSelectionSet(ss SelectionSetI) {
+func (f *InlineFragment) AppendSelectionSet(ss SelectionSetProvider) {
 	// usual suspects for SS
 	//	Selection :
 	//		Field
@@ -396,7 +402,7 @@ func (f *InlineFragment) AssignTypeCond(input string, loc *sdl.Loc_, err *[]erro
 	f.TypeCond = sdl.Name_{Name: sdl.NameValue_(input), Loc: loc}
 }
 
-func (f *InlineFragment) GetSelectionSet() []SelectionSetI {
+func (f *InlineFragment) GetSelectionSet() []SelectionSetProvider {
 	return f.SelectionSet
 }
 
@@ -466,7 +472,7 @@ type Field struct {
 	Path      string              // path to field in statement
 	sdl.Arguments_
 	sdl.Directives_
-	SelectionSet []SelectionSetI //an Field whose type is an object within the parent type to which field belongs. For scalars SS wll be nil
+	SelectionSet []SelectionSetProvider //a Field whose type is an object (within the parent type to which field belongs) will have associated fields. For scalars SS wll be nil
 	Resolver     func(obj sdl.InputValueProvider, args sdl.ObjectVals) string
 }
 
@@ -476,7 +482,7 @@ func (f *Field) SelectionSetNode() {}
 
 //func (f *Field) ExecutableDefinition() {} // removed as Field is not a statement
 
-func (f *Field) AppendSelectionSet(ss SelectionSetI) {
+func (f *Field) AppendSelectionSet(ss SelectionSetProvider) {
 	f.SelectionSet = append(f.SelectionSet, ss)
 }
 

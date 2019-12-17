@@ -527,7 +527,7 @@ func (p *Parser) checkFields(root sdl.GQLTypeProvider, stmt_ ast.StatementDef) {
 	// p.responseMap = nil
 }
 
-func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetI, pathRoot string) {
+func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetProvider, pathRoot string) {
 	// ty_ (object):  type Query { allPersons(last : Int ) : [Person!]! }	<== root
 	//
 	// 	stmt:	query XYZ {
@@ -803,16 +803,16 @@ func (p *Parser) executeStmt(stmt_ *ast.Statement) {
 
 }
 
-func (p *Parser) executeStmtOp(root sdl.GQLTypeProvider, qryFld ast.SelectionSetI, pathRoot string, responseItems sdl.InputValueProvider, out *strings.Builder, wg *sync.WaitGroup) {
-	var set = []ast.SelectionSetI{qryFld}
+func (p *Parser) executeStmtOp(root sdl.GQLTypeProvider, qryFld ast.SelectionSetProvider, pathRoot string, responseItems sdl.InputValueProvider, out *strings.Builder, wg *sync.WaitGroup) {
+	var set = []ast.SelectionSetProvider{qryFld}
 	var responseType string = ""
 	p.executeStmt_(root, set, pathRoot, responseType, responseItems, out)
 	wg.Done()
 }
 
-func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI, pathRoot string, responseType string, responseItems sdl.InputValueProvider, out *strings.Builder) { //type ObjectVals []*ArgumentT - serialized object
-	//func (p *Parser) executeStmt_(root sdl.FieldSetter, set []ast.SelectionSetI, pathRoot string, responseItems sdl.InputValueProvider, out *strings.Builder) { //type ObjectVals []*ArgumentT - serialized object
-	// ty_ (object):  type Query { allPersons(last : Int ) : [Person!]! }	<== root (type information)
+func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetProvider, pathRoot string, responseType string, responseItems sdl.InputValueProvider, out *strings.Builder) { //type ObjectVals []*ArgumentT - serialized object
+	//func (p *Parser) executeStmt_(root sdl.FieldSetter, set []ast.SelectionSetProvider, pathRoot string, responseItems sdl.InputValueProvider, out *strings.Builder) { //type ObjectVals []*ArgumentT - serialized object
+	// ty_ (object):  type Query { allPersons(last : Int ) : [Person!]! }	<== root type, Person.  Provides actual type information associated with query field.
 	//
 	// 	stmt:	`query XYZ {												<== query statement (what to display)
 	//      allPersons(last: 2 ) {											<== resolver here - generates data below
@@ -1680,7 +1680,11 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 			//
 			// check include directive present
 			//
-			var displayFrg bool = true
+			var (
+				displayFrg bool = true
+				// dir        sdl.Directives_
+				// sset       sdl.SelectionGetter
+			)
 			for _, d := range qry.Directives {
 				//... @include(if: $expandedInfo) {
 				if d.Name_.String() == "@include" {
@@ -1702,21 +1706,21 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 				break // continue to next query field
 			}
 			//
-			//  validate responce against fragment def
+			//  validate responce against type def
 			//
 			respType := p.fetchAST(sdl.Name_{Name: sdl.NameValue_(responseType)})
 			if respType == nil {
-				p.addErr(fmt.Sprintf(`Response type "%s" not found in cache"`, responseType))
+				p.addErr(fmt.Sprintf(`Response type "%s" not defined in Graphql respository"`, responseType))
 				return
 			}
 			respObj, ok := respType.(*sdl.Object_)
 			if !ok {
-				p.addErr(fmt.Sprintf(`Response type "%s" is not an Graphql Object`, responseType))
+				p.addErr(fmt.Sprintf(`Response type "%s" is not a Graphql Object`, responseType))
 				p.abort = true
 				return
 			}
 			//
-			// confirm response type matches fragment type
+			// confirm response type matches fragment type (expected type )
 			//
 			expType := p.fetchAST(qry.FragStmt.TypeCond)
 			if expType == nil {
@@ -1724,33 +1728,18 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 			} else {
 				//Fragments cannot be specified on any input value (scalar, enumeration, or input object).
 				switch x := expType.(type) {
+
 				case *sdl.Object_:
-					if respType.TypeName() != x.TypeName() {
+					//
+					// check response Type name must match expected type name e.g. Person is the type name for a sdl.Object_
+					//
+					if respObj.TypeName() != x.TypeName() {
 						p.addErr(fmt.Sprintf(`Response type "%s" does not match Fragment type "%s"`, responseType, x.TypeName()))
 						p.abort = true
 						return
 					}
-
-				case *sdl.Interface_:
 					//
-					// does responseType implement interface
-					//
-					var implements bool
-					for _, itf := range respObj.Implements {
-						if itf.Equals(x.Name_) {
-							implements = true
-							fmt.Printf(`Response type "%s" does  implement interface "%s"`, responseType, x.Name_)
-							fmt.Println()
-							break
-						}
-					}
-					if !implements {
-						p.addErr(fmt.Sprintf(`Response type "%s" does not implement interface "%s"`, responseType, x.Name_))
-						p.abort = true
-						return
-					}
-					//
-					// check directives in associated Fragment stmt
+					// Directives on fragment (based on Object)
 					//
 					for _, d := range qry.FragStmt.Directives {
 						//... @include(if: $expandedInfo) {
@@ -1770,15 +1759,60 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetI,
 						}
 					}
 					if displayFrg {
-
+						//
 						p.executeStmt_(root, qry.FragStmt.SelectionSet, pathRoot, responseType, responseItems, out)
-
 					}
+
+					// dir = respObj.Directives_
+					// sset = respObj.FieldSet
+
+				case *sdl.Interface_:
+					//
+					// expected type to which responseType must match is an Interface. So does expected type implement the interface.
+					//
+					var implements bool
+					for _, itf := range respObj.Implements {
+						if itf.Equals(x.Name_) {
+							implements = true
+							fmt.Printf(`Response type "%s" does  implement interface "%s"`, responseType, x.Name_)
+							fmt.Println()
+							break
+						}
+					}
+					if !implements {
+						p.addErr(fmt.Sprintf(`Response type "%s" does not implement interface "%s"`, responseType, x.Name_))
+						p.abort = true
+						return
+					}
+					// dir = qry.FragStmt.Directives
+					// sset = qry.FragStmt.SelectionSet
+					for _, d := range qry.FragStmt.Directives {
+						//... @include(if: $expandedInfo) {
+						if d.Name_.String() == "@include" {
+							for _, arg := range d.Arguments {
+								if arg.Name.String() != "if" {
+									p.addErr(fmt.Sprintf(`Expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
+									return
+								}
+								// parse wil have populated argument value with variable value.
+								if argv, ok := arg.Value.InputValueProvider.(sdl.Bool_); ok {
+									displayFrg = bool(argv)
+								}
+							}
+						} else {
+							fmt.Println("no @include directive")
+						}
+					}
+					if displayFrg {
+						p.executeStmt_(root, qry.FragStmt.SelectionSet, pathRoot, responseType, responseItems, out)
+					}
+
 				case *sdl.Union_:
 				}
 			}
 
 		case *ast.InlineFragment:
+
 			// InlineFragment
 			// ...TypeCondition-opt	Directives-opt	SelectionSet
 
@@ -1837,7 +1871,7 @@ func (p *Parser) parseFragmentStmt(op string) ast.StatementDef {
 	return frag
 }
 
-func (p *Parser) parseFragmentSpread() ast.SelectionSetI {
+func (p *Parser) parseFragmentSpread() ast.SelectionSetProvider {
 	p.nextToken("parseFragmentSpread..") // read over ...
 	if p.curToken.Type != token.IDENT {
 		p.addErr("Identifer expected for fragment spread after ...")
@@ -1849,7 +1883,10 @@ func (p *Parser) parseFragmentSpread() ast.SelectionSetI {
 	return expnd
 }
 
-func (p *Parser) parseInlineFragment(f ast.HasSelectionSetI) ast.SelectionSetI {
+// InlineFragment
+// ...TypeCondition-opt	Directives-opt	SelectionSet
+
+func (p *Parser) parseInlineFragment(f ast.HasSelectionSetProvider) ast.SelectionSetProvider {
 
 	frag := &ast.InlineFragment{Parent: f}
 	p.nextToken() // read over ...
@@ -1864,7 +1901,7 @@ func (p *Parser) parseInlineFragment(f ast.HasSelectionSetI) ast.SelectionSetI {
 // 	Name      string
 // 	Arguments []*Argument
 // 	//	directives   []directive
-// 	SelectionSet []SelectionSetI // field as object
+// 	SelectionSet []SelectionSetProvider // field as object
 // }
 
 // Field
@@ -1881,8 +1918,8 @@ func (p *Parser) parseField() *ast.Field {
 
 }
 
-//func (p *Parser) extractFragment() ast.HasSelectionSetI     { return nil }
-//func (p *Parser) parseInlineFragment() ast.HasSelectionSetI { return nil }
+//func (p *Parser) extractFragment() ast.HasSelectionSetProvider     { return nil }
+//func (p *Parser) parseInlineFragment() ast.HasSelectionSetProvider { return nil }
 
 // =========================================================================
 
@@ -2065,7 +2102,7 @@ var Statement bool
 // Selection :	Field
 //				FragmentSpread
 //				InlineFragment
-func (p *Parser) parseSelectionSet(f ast.HasSelectionSetI, optional ...bool) *Parser {
+func (p *Parser) parseSelectionSet(f ast.HasSelectionSetProvider, optional ...bool) *Parser {
 	// TODO - sometimes SS is optional other times its mandatory.  How to handle. Idea: method SelectionSetOptional() - which souces data from optional field, array.
 	if p.hasError() {
 		return p
@@ -2077,8 +2114,8 @@ func (p *Parser) parseSelectionSet(f ast.HasSelectionSetI, optional ...bool) *Pa
 		}
 		return p
 	}
-	parseSSet := func() ast.SelectionSetI {
-		var node ast.SelectionSetI
+	parseSSet := func() ast.SelectionSetProvider {
+		var node ast.SelectionSetProvider
 
 		switch p.curToken.Type {
 
