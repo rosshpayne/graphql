@@ -77,6 +77,389 @@ fragment comparisonFields on Character {
 	}
 }
 
+func TestShorthandOp(t *testing.T) {
+
+	var input = ` {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+
+fragment comparisonFields on Character {
+  name
+  friends {
+    name
+  }
+}
+
+`
+
+	var expectedErr [1]string
+	expectedErr[0] = ``
+
+	l := lexer.New(input)
+	p := New(l)
+
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
+		p.addErr(err.Error())
+	}
+	//	p.ClearCache()
+	p.SetDocument("DefaultDoc")
+	d, errs := p.ParseDocument()
+	if d != nil {
+		fmt.Println(d.String())
+	}
+	for _, ex := range expectedErr {
+		if len(ex) == 0 {
+			break
+		}
+		found := false
+		for _, err := range errs {
+			if trimWS(err.Error()) == trimWS(ex) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Expected Error = [%q]`, ex)
+		}
+	}
+	for _, got := range errs {
+		found := false
+		for _, exp := range expectedErr {
+			if trimWS(got.Error()) == trimWS(exp) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Unexpected Error = [%q]`, got.Error())
+		}
+	}
+	if compare(d.String(), input) {
+		t.Errorf("Got:      [%s] \n", trimWS(d.String()))
+		t.Errorf("Expected: [%s] \n", trimWS(input))
+		t.Errorf(`Unexpected: program.String() wrong. `)
+	}
+}
+
+func TestMultiStmt1(t *testing.T) {
+
+	var input = `
+	query ABC {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+	query XYZ {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+
+
+fragment comparisonFields on Character {
+  name
+  friends {
+    name
+  }
+}
+
+`
+
+	var expectedErr [1]string
+	expectedErr[0] = ``
+
+	l := lexer.New(input)
+	p := New(l)
+
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
+		p.addErr(err.Error())
+	}
+	//	p.ClearCache()
+	p.SetDocument("DefaultDoc")
+	d, errs := p.ParseDocument()
+	if d != nil {
+		fmt.Println(d.String())
+	}
+	for _, ex := range expectedErr {
+		if len(ex) == 0 {
+			break
+		}
+		found := false
+		for _, err := range errs {
+			if trimWS(err.Error()) == trimWS(ex) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Expected Error = [%q]`, ex)
+		}
+	}
+	for _, got := range errs {
+		found := false
+		for _, exp := range expectedErr {
+			if trimWS(got.Error()) == trimWS(exp) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Unexpected Error = [%q]`, got.Error())
+		}
+	}
+	if compare(d.String(), input) {
+		t.Errorf("Got:      [%s] \n", trimWS(d.String()))
+		t.Errorf("Expected: [%s] \n", trimWS(input))
+		t.Errorf(`Unexpected: program.String() wrong. `)
+	}
+}
+
+func TestMultiStmtDuplicates(t *testing.T) {
+
+	var input = `
+	query xyz {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+	query xyz2 {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+	query xyz {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+	query xyz2 {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+
+
+fragment comparisonFields on Character {
+  name
+  friends {
+    name
+  }
+}
+
+fragment comparisonFields on Character {
+  name
+  friends {
+    name
+  }
+}
+
+`
+
+	var expectedErr [3]string
+	expectedErr[0] = `Duplicate statement name "xyz" at line: 26 column: 8`
+	expectedErr[1] = `Duplicate statement name "xyz2" at line: 38 column: 8`
+	expectedErr[2] = `Duplicate fragment name "comparisonFields" at line: 59 column: 10`
+
+	l := lexer.New(input)
+	p := New(l)
+
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
+		p.addErr(err.Error())
+	}
+	//	p.ClearCache()
+	p.SetDocument("DefaultDoc")
+	d, errs := p.ParseDocument()
+	if d != nil {
+		fmt.Println(d.String())
+	}
+	for _, ex := range expectedErr {
+		if len(ex) == 0 {
+			break
+		}
+		found := false
+		for _, err := range errs {
+			if trimWS(err.Error()) == trimWS(ex) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Expected Error = [%q]`, ex)
+		}
+	}
+	for _, got := range errs {
+		found := false
+		for _, exp := range expectedErr {
+			if trimWS(got.Error()) == trimWS(exp) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Unexpected Error = [%q]`, got.Error())
+		}
+	}
+
+}
+
+func TestMultiStmtNoDups(t *testing.T) {
+
+	var input = `
+	query xyz {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+	query xyz1 {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+	query xyz1a {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+	query xyz2 {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+
+
+fragment comparisonFields on Character {
+  name
+  friends {
+    name
+  }
+}
+
+fragment comparisonFields2 on Character {
+  name
+  friends {
+    name
+  }
+}
+
+`
+
+	var expectedErr [1]string
+	expectedErr[0] = ``
+
+	l := lexer.New(input)
+	p := New(l)
+
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
+		p.addErr(err.Error())
+	}
+	//	p.ClearCache()
+	p.SetDocument("DefaultDoc")
+	p.SetExecStmt("xyz2")
+	d, errs := p.ParseDocument()
+	if d != nil {
+		fmt.Println(d.String())
+	}
+	for _, ex := range expectedErr {
+		if len(ex) == 0 {
+			break
+		}
+		found := false
+		for _, err := range errs {
+			if trimWS(err.Error()) == trimWS(ex) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Expected Error = [%q]`, ex)
+		}
+	}
+	for _, got := range errs {
+		found := false
+		for _, exp := range expectedErr {
+			if trimWS(got.Error()) == trimWS(exp) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Unexpected Error = [%q]`, got.Error())
+		}
+	}
+
+}
+
 func TestFragmentNested(t *testing.T) {
 
 	var input = `query {

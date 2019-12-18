@@ -41,6 +41,7 @@ const (
 
 type Statement struct {
 	Type    string // Operational | Fragment
+	Name    string
 	AST     StatementDef
 	RootAST sdl.GQLTypeProvider
 }
@@ -63,6 +64,10 @@ func (d Document) String() string {
 
 // these are the ast structures that have a selectionset collection, which
 // maybe different to the objects contained in the selectionset
+//  *OperationStmt) AppendSelectionSet(ss SelectionSetProvider) {
+//  *FragmentStmt) AppendSelectionSet(ss SelectionSetProvider) {
+//  *InlineFragment) AppendSelectionSet(ss SelectionSetProvider) {
+//  *Field) AppendSelectionSet(ss SelectionSetProvider) {
 type HasSelectionSetProvider interface {
 	AppendSelectionSet(ss SelectionSetProvider) // TODO - this method may not be appropriate for this interface.
 }
@@ -190,7 +195,7 @@ func (o *OperationStmt) String() string { // Query will now satisfy Node interfa
 	var s strings.Builder
 
 	if len(o.Name.Name) > 0 {
-		s.WriteString(fmt.Sprintf("%s %s", o.Type, o.Name))
+		s.WriteString(fmt.Sprintf("\n %s %s", o.Type, o.Name))
 	} else {
 		s.WriteString(fmt.Sprintf("%s ", o.Type))
 	}

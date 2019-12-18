@@ -1,6 +1,7 @@
 package ast
 
 import (
+	"errors"
 	"fmt"
 	"log"
 
@@ -78,6 +79,9 @@ func CacheClear() {
 }
 func CacheFetchStmt(input StmtName_) (StatementDef, bool) {
 
+	if len(input) == 0 {
+		input = "__NONAME"
+	}
 	if ast, ok := stmtCache_[input]; !ok {
 		fmt.Printf("** QL CacheFetchStmt [%s] NOT FOUND \n", input)
 		return nil, false
@@ -88,7 +92,11 @@ func CacheFetchStmt(input StmtName_) (StatementDef, bool) {
 }
 
 func Add2StmtCache(input StmtName_, obj StatementDef) {
-	fmt.Printf("** Add2Cache  x%sx [%s]\n", input, obj.String())
+
+	if len(input) == 0 {
+		panic(errors.New("Cannot add a statement to the cache without a name"))
+	}
+	fmt.Printf("** Add2stmtCache  x%sx [%s]\n", input, obj.String())
 	stmtCache_[input] = obj
 }
 

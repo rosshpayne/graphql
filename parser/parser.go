@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	_ "os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -21,6 +22,10 @@ const (
 	Executable = 'E'
 	TypeSystem = 'T'
 	defaultDoc = "DefaultDoc"
+	// operation types
+	QUERY        = `query`
+	MUTATION     = `mutation`
+	SUBSCRIPTION = `subscription`
 )
 
 type Argument struct {
@@ -36,9 +41,10 @@ type (
 	Parser struct {
 		l        *lexer.Lexer
 		document string
-		extend   bool
+		xStmt    string // stmt name to be executed
 
-		abort bool
+		extend bool
+		abort  bool
 		// schema rootAST
 
 		curToken  token.Token
@@ -60,7 +66,10 @@ type (
 
 var (
 	//	enumRepo      ast.EnumRepo_
-	typeNotExists map[sdl.NameValue_]bool
+	typeNotExists  map[sdl.NameValue_]bool
+	FragmentStmts  map[sdl.NameValue_]*ast.FragmentStmt
+	OperationStmts map[sdl.NameValue_]*ast.OperationStmt
+	noName         string = "__NONAME__"
 )
 
 func New(l *lexer.Lexer) *Parser {
@@ -86,18 +95,13 @@ func New(l *lexer.Lexer) *Parser {
 	return p
 }
 
-var (
-	FragmentStmts  map[sdl.Name_]*ast.FragmentStmt
-	OperationStmts map[sdl.Name_]*ast.OperationStmt
-)
-
 // astsitory of all types defined in the graph
 
 func init() {
 	//	enumRepo = make(ast.EnumRepo_)
 	typeNotExists = make(map[sdl.NameValue_]bool)
-	FragmentStmts = make(map[sdl.Name_]*ast.FragmentStmt)
-	OperationStmts = make(map[sdl.Name_]*ast.OperationStmt)
+	FragmentStmts = make(map[sdl.NameValue_]*ast.FragmentStmt)
+	OperationStmts = make(map[sdl.NameValue_]*ast.OperationStmt)
 }
 
 func (p *Parser) Loc() *sdl.Loc_ {
@@ -205,10 +209,10 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		}
 
 		if stmtAST != nil {
-			stmt = &ast.Statement{Type: stmtType, AST: stmtAST}
+			stmt = &ast.Statement{Type: stmtType, AST: stmtAST, Name: string(stmtAST.StmtName())}
 			api.Statements = append(api.Statements, stmt)
 		} else {
-			stmt = &ast.Statement{Type: stmtType, AST: nil}
+			stmt = &ast.Statement{Type: stmtType, AST: nil, Name: string(stmtAST.StmtName())}
 			api.Statements = append(api.Statements, stmt)
 			failed = true
 		}
@@ -260,7 +264,36 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 	allErrors = append(allErrors, p.perror...)
 	p.perror = nil
 	//
-	// phase 2a: validate any fragment stmt - resolve ALL types. Once complete all type's AST will reside in the cache
+	// phase 2  - check statment names
+	//
+	if len(OperationStmts) > 1 {
+		var (
+			nm    string
+			short int
+		)
+		// look for shortened version of statments
+		for i := 0; i < 10; i++ {
+			if i == 0 {
+				nm = noName
+			} else {
+				nm = noName + "/" + strconv.Itoa(i)
+			}
+			if _, ok := OperationStmts[sdl.NameValue_(nm)]; ok {
+				short++
+			} else {
+				break
+			}
+		}
+		if short > 0 {
+			p.addErr(fmt.Sprintf(" %d shorted stmt detected. Shortened operation statment not allowed when more than one statement exists in document.. Please provide all statements with names", short))
+		}
+	}
+	// for k, v := range OperationStmts {
+
+	// }
+	//
+	//
+	// phase 3a: validate any fragment stmt - resolve ALL types. Once complete all type's AST will reside in the cache
 	//                  			  and  *Type.AST assigned where applicable
 	//
 	for _, stmt := range api.Statements {
@@ -289,7 +322,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		p.perror = nil
 	}
 	//
-	// phase 2b: validate operational stmts
+	// phase 3b: validate operational stmts
 	//
 	if failed {
 		return nil, allErrors
@@ -329,14 +362,25 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 	//
 	// Execute phase
 	//
+	var executed bool
 	for _, stmt := range api.Statements {
 		if stmt.Type == "fragment" {
 			continue
 		}
+		fmt.Println("************** ", stmt.Name, string(stmt.AST.StmtName()), "X", p.xStmt)
+		if len(p.xStmt) > 0 && stmt.Name != p.xStmt {
+			continue
+		}
 		//p.executeStmt(stmt.RootAST, stmt.AST)
 		p.executeStmt(stmt)
+		executed = true
 		allErrors = append(allErrors, p.perror...)
 	}
+	if !executed {
+		p.addErr(fmt.Sprintf(`Statement "%s" not found`, p.xStmt))
+	}
+	allErrors = append(allErrors, p.perror...)
+
 	return api, allErrors
 }
 
@@ -344,8 +388,19 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 
 var opt bool = true // is optional
 func (p *Parser) parseStatement() (ast.StatementDef, string) {
-	stmtType := p.curToken.Literal
-	if f, ok := p.parseFns[p.curToken.Type]; ok {
+	var (
+		stmtType string
+	)
+	tokType := p.curToken.Type
+	switch tokType {
+	case token.QUERY, token.MUTATION, token.SUBSCRIPTION, token.FRAGMENT:
+		stmtType = p.curToken.Literal
+	default:
+		// presume shorthand form of operation
+		tokType = token.QUERY
+		stmtType = QUERY
+	}
+	if f, ok := p.parseFns[tokType]; ok {
 		return f(stmtType), stmtType
 	}
 	p.addErr(fmt.Sprintf(`Non QL statement detected, "%s" at line: %d column: %d. Aborted`, stmtType, p.l.Line, p.l.Col))
@@ -355,6 +410,11 @@ func (p *Parser) parseStatement() (ast.StatementDef, string) {
 func (p *Parser) SetDocument(doc string) error {
 	p.document = doc
 	//TODO check document exists in db
+	return nil
+}
+
+func (p *Parser) SetExecStmt(xStmt string) error {
+	p.xStmt = xStmt
 	return nil
 }
 
@@ -1848,27 +1908,79 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 
 func (p *Parser) parseOperationStmt(op string) ast.StatementDef {
 	// Types: query, mutation, subscription
-	p.nextToken() // read over query, mutation keywords
+	var (
+		f func(sdl.NameValue_)
+		i int
+	)
+	switch p.curToken.Type {
+	case token.QUERY, token.MUTATION, token.SUBSCRIPTION, token.FRAGMENT:
+		p.nextToken("here... read over query") // read over query, mutation keywords
+	}
 	stmt := &ast.OperationStmt{Type: op}
 	p.root = stmt //TODO - what is this??
 
 	p.parseName(stmt, opt).parseVariables(stmt, opt).parseDirectives(stmt, opt).parseSelectionSet(stmt)
 
-	OperationStmts[stmt.Name] = stmt
+	f = func(nw sdl.NameValue_) {
+		if _, ok := OperationStmts[nw]; !ok {
+			OperationStmts[nw] = stmt
+			stmt.Name.Name = nw
+			return
+		} else {
+			i++
+			if !stmt.Name.EqualString(noName) {
+				// dev specified name duplicated
+				p.addErr(fmt.Sprintf(`Duplicate statement name "%s" %s`, stmt.Name, stmt.Name.AtPosition()))
+			}
+			s := stmt.Name.String() + "/" + strconv.Itoa(i)
+			f(sdl.NameValue_(s))
+		}
+	}
+
+	if !stmt.Name.Exists() {
+		stmt.Name = sdl.Name_{Name: sdl.NameValue_(noName)}
+		f(stmt.Name.Name)
+	} else {
+		f(stmt.Name.Name)
+	}
 
 	return stmt
 
 }
 
 func (p *Parser) parseFragmentStmt(op string) ast.StatementDef {
+	var (
+		f func(sdl.NameValue_)
+		i int
+	)
 	p.nextToken()               // read over Fragment keyword
-	frag := &ast.FragmentStmt{} // TODO: alternative to Stmt field could simply use check len(Name) to determine if Stmt or inline
+	stmt := &ast.FragmentStmt{} // TODO: alternative to Stmt field could simply use check len(Name) to determine if Stmt or inline
 
-	_ = p.parseName(frag).parseTypeCondition(frag).parseDirectives(frag, opt).parseSelectionSet(frag)
+	_ = p.parseName(stmt).parseTypeCondition(stmt).parseDirectives(stmt, opt).parseSelectionSet(stmt)
 
-	FragmentStmts[frag.Name] = frag
+	f = func(nw sdl.NameValue_) {
+		if _, ok := FragmentStmts[nw]; !ok {
+			FragmentStmts[nw] = stmt
+			stmt.Name.Name = nw
+			return
+		} else {
+			i++
+			if !stmt.Name.EqualString(noName) {
+				// dev specified name duplicated
+				p.addErr(fmt.Sprintf(`Duplicate fragment name "%s" %s`, stmt.Name, stmt.Name.AtPosition()))
+			}
+			s := stmt.Name.String() + "/" + strconv.Itoa(i)
+			f(sdl.NameValue_(s))
+		}
+	}
 
-	return frag
+	if !stmt.Name.Exists() {
+		stmt.Name = sdl.Name_{Name: sdl.NameValue_(noName)}
+		f(stmt.Name.Name)
+	} else {
+		f(stmt.Name.Name)
+	}
+	return stmt
 }
 
 func (p *Parser) parseFragmentSpread() ast.SelectionSetProvider {
