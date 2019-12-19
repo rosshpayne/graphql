@@ -1,6 +1,7 @@
 package ast
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -478,7 +479,7 @@ type Field struct {
 	sdl.Arguments_
 	sdl.Directives_
 	SelectionSet []SelectionSetProvider //a Field whose type is an object (within the parent type to which field belongs) will have associated fields. For scalars SS wll be nil
-	Resolver     func(obj sdl.InputValueProvider, args sdl.ObjectVals) string
+	Resolver     func(context.Context, sdl.InputValueProvider, sdl.ObjectVals) <-chan string
 }
 
 func (f *Field) SelectionSetNode() {}

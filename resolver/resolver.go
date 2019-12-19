@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -14,7 +15,7 @@ type fieldResolver interface {
 
 // Resolvers
 
-type ResolverFunc func(obj sdl.InputValueProvider, args sdl.ObjectVals) string
+type ResolverFunc func(context.Context, sdl.InputValueProvider, sdl.ObjectVals) <-chan string
 
 type ResolverPath string
 

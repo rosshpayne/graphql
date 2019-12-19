@@ -1,12 +1,14 @@
 package parser
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	_ "os"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	sdl "github.com/graph-sdl/ast"
 	lex "github.com/graph-sdl/lexer"
@@ -272,7 +274,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 			short int
 		)
 		// look for shortened version of statments
-		for i := 0; i < 10; i++ {
+		for i := 0; ; i++ {
 			if i == 0 {
 				nm = noName
 			} else {
@@ -288,9 +290,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 			p.addErr(fmt.Sprintf(" %d shorted stmt detected. Shortened operation statment not allowed when more than one statement exists in document.. Please provide all statements with names", short))
 		}
 	}
-	// for k, v := range OperationStmts {
-
-	// }
+	// Note: statement name duplicates are handled during parsing of the statement
 	//
 	//
 	// phase 3a: validate any fragment stmt - resolve ALL types. Once complete all type's AST will reside in the cache
@@ -367,7 +367,6 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		if stmt.Type == "fragment" {
 			continue
 		}
-		fmt.Println("************** ", stmt.Name, string(stmt.AST.StmtName()), "X", p.xStmt)
 		if len(p.xStmt) > 0 && stmt.Name != p.xStmt {
 			continue
 		}
@@ -1281,14 +1280,32 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					//
 					//  execute Resolver - using current response data (nil for the first time) and any arguments associated with field
 					//
-					response := qry.Resolver(resp, qry.Arguments)
+					//response := qry.Resolver(resp, qry.Arguments)
+					var ctxMsg string = `Resolver for "%s" successfully returned but`
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					defer cancel()
+					//
+					rch := qry.Resolver(ctx, resp, qry.Arguments)
+
+					select {
+					case <-ctx.Done():
+						ctxMsg = `Resolver for "%s" timed out and consequently`
+						break
+					case response = <-rch:
+						response = ""
+						break
+					}
 
 					fmt.Printf(`>>>>>>>  response: "%s"\n`, response)
 					//
 					// respone returns an object that matches the root i.e. Person, Pet, Address, Business
 					//
 					if len(response) == 0 {
-						p.addErr(fmt.Sprintf(`Resolver for "%s" produced no content, %s %s\n`, qry.Name, root.TypeName(), qry.Name.AtPosition()))
+						fldNm := qry.Name
+						if qry.Alias.Exists() {
+							fldNm = qry.Alias
+						}
+						p.addErr(fmt.Sprintf(ctxMsg+` produced no content, %s\n`, fldNm, qry.Name.AtPosition()))
 						p.abort = true
 						return
 					}
@@ -1634,10 +1651,19 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 						p.abort = true
 						return
 					}
+					ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+					defer cancel()
 					// execute resolver using response data for field
-					response = qry.Resolver(resp, qry.Arguments)
-					fmt.Println("Response >>>>> ", response)
+					rch := qry.Resolver(ctx, resp, qry.Arguments)
 
+					select {
+					case <-ctx.Done():
+						break
+					case response = <-rch:
+						break
+					}
+
+					fmt.Println("Response >>>>> ", response)
 					// generate  AST from response JSON { name: value name: value ... }
 					l := lex.New(response)
 					p2 := pse.New(l)

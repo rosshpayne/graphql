@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -169,92 +170,133 @@ var posts = []*Post{
 	&Post{6, "GraphQL for Architects", 100}, &Post{id: 7, title: "xyz", author: 100},
 }
 
-var ResolverAll = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
+var ResolverAll = func(ctx context.Context, resp sdl.InputValueProvider, args sdl.ObjectVals) <-chan string {
 
-	var s strings.Builder
-	var last_ int = 2
-	var err error
-	fmt.Println(args.String())
-	if len(args) > 0 {
-		if args[0].Name.EqualString("last") {
-			last := args[0].Value.InputValueProvider.(sdl.Int_)
-			fmt.Println("Limited to: ", string(last))
-			if last_, err = strconv.Atoi(string(last)); err != nil {
-				fmt.Println(err)
-			}
-		}
-	}
-	s.WriteString("{data: [")
-	for i, v := range persons {
-		if i > last_-1 {
-			break
-		}
-		s.WriteString(v.String())
-	}
-	s.WriteString("]}")
-	return s.String()
-}
-
-var ResolvePartial = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
-
-	var s strings.Builder
-	var last_ int = 2
-	var err error
-	if len(args) > 0 {
-		if args[0].Name.EqualString("last") {
-			last := args[0].Value.InputValueProvider.(sdl.Int_)
-			fmt.Println("Limited to: ", string(last))
-			if last_, err = strconv.Atoi(string(last)); err != nil {
-				fmt.Println(err)
-			}
-		}
-	}
-	s.WriteString("{data: [")
-	for i, v := range persons {
-		if i > last_-1 {
-			break
-		}
-		s.WriteString(v.StringPartial())
-	}
-	s.WriteString("] }")
-	return s.String()
-
-}
-
-var ResolvePosts = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
-
-	var s strings.Builder
-
-	for _, v := range args {
-		if v.Name_.EqualString("resp") {
-			resp := v.Value.InputValueProvider
-			switch x := resp.(type) {
-			case sdl.List_:
-				if len(x) > 0 {
-					s.WriteString("{data: [")
+	f := func() string {
+		var s strings.Builder
+		var last_ int = 2
+		var err error
+		fmt.Println(args.String())
+		if len(args) > 0 {
+			if args[0].Name.EqualString("last") {
+				last := args[0].Value.InputValueProvider.(sdl.Int_)
+				fmt.Println("Limited to: ", string(last))
+				if last_, err = strconv.Atoi(string(last)); err != nil {
+					fmt.Println(err)
 				}
-				for i, v := range x {
-					k := string(v.InputValueProvider.(sdl.Int_))
-					if ki, err := strconv.Atoi(k); err != nil {
-						fmt.Println(err.Error())
-					} else {
-						s.WriteString(posts[ki-1].String())
+			}
+		}
+		s.WriteString("{data: [")
+		for i, v := range persons {
+			if i > last_-1 {
+				break
+			}
+			s.WriteString(v.String())
+		}
+		s.WriteString("]}")
+		return s.String()
+	}
+
+	gql := make(chan string)
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case gql <- f(): // gql channel unblocks immediately when calling routine (GraphQL server) starts listening on channel
+			return
+		}
+	}()
+
+	return gql
+}
+
+var ResolvePartial = func(ctx context.Context, resp sdl.InputValueProvider, args sdl.ObjectVals) <-chan string {
+
+	f := func() string {
+		var s strings.Builder
+		var last_ int = 2
+		var err error
+		if len(args) > 0 {
+			if args[0].Name.EqualString("last") {
+				last := args[0].Value.InputValueProvider.(sdl.Int_)
+				fmt.Println("Limited to: ", string(last))
+				if last_, err = strconv.Atoi(string(last)); err != nil {
+					fmt.Println(err)
+				}
+			}
+		}
+		s.WriteString("{data: [")
+		for i, v := range persons {
+			if i > last_-1 {
+				break
+			}
+			s.WriteString(v.StringPartial())
+		}
+		s.WriteString("] }")
+		return s.String()
+	}
+
+	gql := make(chan string)
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case gql <- f(): // gql channel unblocks immediately when calling routine (GraphQL server) starts listening on channel
+			return
+		}
+	}()
+
+	return gql
+}
+
+var ResolvePosts = func(ctx context.Context, resp sdl.InputValueProvider, args sdl.ObjectVals) <-chan string {
+
+	f := func() string {
+		var s strings.Builder
+
+		for _, v := range args {
+			if v.Name_.EqualString("resp") {
+				resp := v.Value.InputValueProvider
+				switch x := resp.(type) {
+				case sdl.List_:
+					if len(x) > 0 {
+						s.WriteString("{data: [")
 					}
-					if i < len(x)-1 {
-						s.WriteString(",")
+					for i, v := range x {
+						k := string(v.InputValueProvider.(sdl.Int_))
+						if ki, err := strconv.Atoi(k); err != nil {
+							fmt.Println(err.Error())
+						} else {
+							s.WriteString(posts[ki-1].String())
+						}
+						if i < len(x)-1 {
+							s.WriteString(",")
+						}
 					}
-				}
-				if len(x) > 0 {
-					s.WriteString(" ] }")
+					if len(x) > 0 {
+						s.WriteString(" ] }")
+					}
 				}
 			}
 		}
+
+		return s.String()
 	}
 
-	return s.String()
+	gql := make(chan string)
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case gql <- f(): // gql channel unblocks immediately when calling routine (GraphQL server) starts listening on channel
+			return
+		}
+	}()
+
+	return gql
 }
 
-var ResolveAge = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
+var ResolveAge = func(ctx context.Context, resp sdl.InputValueProvider, args sdl.ObjectVals) <-chan string {
 	var (
 		s     strings.Builder
 		scale float32
@@ -272,50 +314,65 @@ var ResolveAge = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
 		}
 	}
 
-	resp_ := resp.(sdl.List_)
+	fx := func() string {
+		resp_ := resp.(sdl.List_)
 
-	var f func(sdl.List_)
+		var f func(sdl.List_)
 
-	f = func(y sdl.List_) {
+		f = func(y sdl.List_) {
 
-		for i := 0; i < len(y); i++ {
-			if x, ok := y[i].InputValueProvider.(sdl.List_); ok {
-				s.WriteString("[")
-				f(x)
-				s.WriteString("]")
-			} else {
-				// optimise by performing loop here rather than use outer for loop
-				for i := 0; i < len(y); i++ {
-					switch x := y[i].InputValueProvider.(type) {
-					case sdl.Float_:
-						if num, err := strconv.ParseFloat(string(x), 32); err != nil {
-							fmt.Println("error ", err.Error())
-						} else {
-							result := scale * float32(num)
-							s.WriteString(strconv.FormatFloat(float64(result), 'f', -1, 32))
+			for i := 0; i < len(y); i++ {
+				if x, ok := y[i].InputValueProvider.(sdl.List_); ok {
+					s.WriteString("[")
+					f(x)
+					s.WriteString("]")
+				} else {
+					// optimise by performing loop here rather than use outer for loop
+					for i := 0; i < len(y); i++ {
+						switch x := y[i].InputValueProvider.(type) {
+						case sdl.Float_:
+							if num, err := strconv.ParseFloat(string(x), 32); err != nil {
+								fmt.Println("error ", err.Error())
+							} else {
+								result := scale * float32(num)
+								s.WriteString(strconv.FormatFloat(float64(result), 'f', -1, 32))
+							}
+						case sdl.Int_:
+							if num, err := strconv.Atoi(string(x)); err != nil {
+								fmt.Println("error ", err.Error())
+							} else {
+								result := scale * float32(num)
+								s.WriteString(strconv.FormatFloat(float64(result), 'f', -1, 32))
+							}
+						default:
+							s.WriteString("NoValue")
 						}
-					case sdl.Int_:
-						if num, err := strconv.Atoi(string(x)); err != nil {
-							fmt.Println("error ", err.Error())
-						} else {
-							result := scale * float32(num)
-							s.WriteString(strconv.FormatFloat(float64(result), 'f', -1, 32))
+						if i < len(y)-1 {
+							s.WriteString(",")
 						}
-					default:
-						s.WriteString("NoValue")
 					}
-					if i < len(y)-1 {
-						s.WriteString(",")
-					}
+					break
 				}
-				break
 			}
 		}
+		s.WriteString("[") // alternatively, "{age: ["
+		f(resp_)
+		s.WriteString("]") // "]}"
+		return s.String()
 	}
-	s.WriteString("[") // alternatively, "{age: ["
-	f(resp_)
-	s.WriteString("]") // "]}"
-	return s.String()
+
+	gql := make(chan string)
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case gql <- fx(): // gql channel unblocks immediately when calling routine (GraphQL server) starts listening on channel
+			return
+		}
+	}()
+
+	return gql
+
 }
 
 type Starship struct {
@@ -477,44 +534,58 @@ var droid = []*Droid{
 	&Droid{i: 2, id: "ewxdfw23e", name: "R2-D2", friends: []int{5, 3, 4}, appearsIn: []int{0, 1, 2}, primaryFunction: "Multifunction"},
 }
 
-var ResolverHero = func(resp sdl.InputValueProvider, args sdl.ObjectVals) string {
+var ResolverHero = func(ctx context.Context, resp sdl.InputValueProvider, args sdl.ObjectVals) <-chan string {
 	var (
 		episode string
 		index   int
 		s       strings.Builder
 	)
 
-	for _, v := range args {
+	f := func() string {
+		for _, v := range args {
 
-		if v.Name_.EqualString("episode") {
-			if x, ok := v.Value.InputValueProvider.(*sdl.EnumValue_); ok {
-				episode = x.String()
+			if v.Name_.EqualString("episode") {
+				if x, ok := v.Value.InputValueProvider.(*sdl.EnumValue_); ok {
+					episode = x.String()
+				}
 			}
 		}
-	}
-	for i, v := range episodes {
-		if strings.ToUpper(episode) == string(v) {
-			index = i
-		}
-	}
-	//	s.WriteString("[" + fmt.Sprintf("%d", index) + " " + episode)
-
-	//s.WriteString("{Droid:  [")
-	s.WriteString("{Human:  [") // becomes respType in parser executeStmt_(). When type of response is an Interface then "on Human" & "on Droid" will use respType to determine which to use.
-
-	for _, v := range humans {
-		var found bool
-		for _, k := range v.appearsIn {
-			if k == index {
-				found = true
+		for i, v := range episodes {
+			if strings.ToUpper(episode) == string(v) {
+				index = i
 			}
 		}
-		if found {
-			s.WriteString(v.String())
-			s.WriteString(",")
+		//	s.WriteString("[" + fmt.Sprintf("%d", index) + " " + episode)
+
+		//s.WriteString("{Droid:  [")
+		s.WriteString("{Human:  [") // becomes respType in parser executeStmt_(). When type of response is an Interface then "on Human" & "on Droid" will use respType to determine which to use.
+
+		for _, v := range humans {
+			var found bool
+			for _, k := range v.appearsIn {
+				if k == index {
+					found = true
+				}
+			}
+			if found {
+				s.WriteString(v.String())
+				s.WriteString(",")
+			}
 		}
+		s.WriteString("] }")
+		time.Sleep(1250 * time.Millisecond)
+		return s.String()
 	}
-	s.WriteString("] }")
-	time.Sleep(750 * time.Millisecond)
-	return s.String()
+
+	gql := make(chan string)
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case gql <- f(): // gql channel unblocks and executes f() immediately when GraphQL server starts listening on channel
+			return
+		}
+	}()
+
+	return gql
 }
