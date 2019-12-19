@@ -24,6 +24,8 @@ const (
 	Executable = 'E'
 	TypeSystem = 'T'
 	defaultDoc = "DefaultDoc"
+	//
+	ResolverTimeoutMS = 800
 	// operation types
 	QUERY        = `query`
 	MUTATION     = `mutation`
@@ -1282,7 +1284,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					//
 					//response := qry.Resolver(resp, qry.Arguments)
 					var ctxMsg string = `Resolver for "%s" successfully returned but`
-					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					ctx, cancel := context.WithTimeout(context.Background(), ResolverTimeoutMS*time.Millisecond)
 					defer cancel()
 					//
 					rch := qry.Resolver(ctx, resp, qry.Arguments)
@@ -1292,7 +1294,6 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 						ctxMsg = `Resolver for "%s" timed out and consequently`
 						break
 					case response = <-rch:
-						response = ""
 						break
 					}
 
@@ -1651,7 +1652,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 						p.abort = true
 						return
 					}
-					ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+					ctx, cancel := context.WithTimeout(context.Background(), ResolverTimeoutMS*time.Millisecond)
 					defer cancel()
 					// execute resolver using response data for field
 					rch := qry.Resolver(ctx, resp, qry.Arguments)

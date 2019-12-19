@@ -573,7 +573,7 @@ var ResolverHero = func(ctx context.Context, resp sdl.InputValueProvider, args s
 			}
 		}
 		s.WriteString("] }")
-		time.Sleep(1250 * time.Millisecond)
+		time.Sleep(650 * time.Millisecond)
 		return s.String()
 	}
 
