@@ -51,8 +51,8 @@ type (
 		abort  bool
 		// schema rootAST
 
-		curToken  token.Token
-		peekToken token.Token
+		curToken  *token.Token
+		peekToken *token.Token
 
 		responseMap map[string]*sdl.InputValueProvider //struct{}
 		respOrder   []string                           // slice of field paths in order executed.
@@ -151,13 +151,13 @@ func (p *Parser) nextToken(s ...string) {
 	if len(s) > 0 {
 		fmt.Printf("** Current Token: [%s] %s %s %s %s %s %s\n", s[0], p.curToken.Type, p.curToken.Literal, p.curToken.Cat, "Next Token:  ", p.peekToken.Type, p.peekToken.Literal)
 	}
-	//	if p.curToken != nil && p.curToken.Illegal {
-	if p.curToken.Illegal {
+	if p.curToken != nil && p.curToken.Illegal {
+		//if p.curToken.Illegal {
 		p.addErr(fmt.Sprintf("Illegal %s token, [%s]", p.curToken.Type, p.curToken.Literal))
 	}
 	// if $variable present then mark the identier as a VALUE
-	//	if p.curToken != nil && p.curToken.Literal == token.DOLLAR {
-	if p.curToken.Literal == token.DOLLAR {
+	if p.curToken != nil && p.curToken.Literal == token.DOLLAR {
+		//if p.curToken.Literal == token.DOLLAR {
 		p.peekToken.Cat = token.VALUE
 	}
 }

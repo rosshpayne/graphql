@@ -42,8 +42,8 @@ func (l *Lexer) AtPosition() string {
 	return fmt.Sprintf("at line: %d, column: %d", l.Line, l.Col)
 }
 
-func (l *Lexer) NextToken() token.Token {
-	var tok token.Token
+func (l *Lexer) NextToken() *token.Token {
+	var tok *token.Token
 	//	fmt.Printf("NextToken: %c\n", l.ch)
 	l.skipWhitespace() // scan to next non-whitespace and return its value as a token
 	//fmt.Printf("[%c]\n", l.ch)
@@ -61,7 +61,7 @@ func (l *Lexer) NextToken() token.Token {
 				//ch := l.ch
 				l.readRune()
 				literal := token.EXPAND
-				tok = token.Token{Type: token.EXPAND, Literal: literal}
+				tok = &token.Token{Type: token.EXPAND, Literal: literal}
 			} else {
 				tok = l.newToken(token.ILLEGAL, l.ch)
 			}
@@ -111,6 +111,7 @@ func (l *Lexer) NextToken() token.Token {
 	case '=':
 		tok = l.newToken(token.ASSIGN, l.ch)
 	case 0:
+		tok = l.newToken(token.EOF, l.ch)
 		tok.Literal = ""
 		tok.Type = token.EOF
 	default:
@@ -171,16 +172,16 @@ func (l *Lexer) peekRune() rune {
 	}
 }
 
-func (l *Lexer) readIdentifier() token.Token {
+func (l *Lexer) readIdentifier() *token.Token {
 	start := token.Pos{l.Line, l.Col}
 	Loc := l.cLoc
 	for unicode.IsLetter(l.ch) || l.ch == '_' || unicode.IsDigit(l.ch) {
 		l.readRune()
 	}
-	return token.Token{Cat: token.NONVALUE, Type: token.STRING, Literal: l.input[Loc:l.cLoc], Loc: start}
+	return &token.Token{Cat: token.NONVALUE, Type: token.STRING, Literal: l.input[Loc:l.cLoc], Loc: start}
 }
 
-func (l *Lexer) readNumber() token.Token {
+func (l *Lexer) readNumber() *token.Token {
 	var tokenT token.TokenType = token.INT
 	var illegalT bool
 	sLoc := l.cLoc
@@ -238,11 +239,11 @@ func (l *Lexer) readNumber() token.Token {
 		last = l.cLoc + 2 // include rune next to + or -
 		l.readRune()      // read over + -
 	}
-	return token.Token{Cat: token.VALUE, Type: tokenT, Literal: l.input[sLoc:last], Illegal: illegalT, Loc: start}
+	return &token.Token{Cat: token.VALUE, Type: tokenT, Literal: l.input[sLoc:last], Illegal: illegalT, Loc: start}
 
 }
 
-func (l *Lexer) readString() token.Token {
+func (l *Lexer) readString() *token.Token {
 
 	Loc := l.cLoc + 1
 	start := token.Pos{l.Line, l.Col}
@@ -275,9 +276,9 @@ func (l *Lexer) readString() token.Token {
 	var eLoc int
 	if l.del == token.RAWSTRINGDEL {
 		eLoc = 2
-		return token.Token{Cat: token.VALUE, Type: token.RAWSTRING, Literal: l.input[Loc : l.cLoc-eLoc], Loc: start}
+		return &token.Token{Cat: token.VALUE, Type: token.RAWSTRING, Literal: l.input[Loc : l.cLoc-eLoc], Loc: start}
 	}
-	return token.Token{Cat: token.VALUE, Type: token.STRING, Literal: l.input[Loc : l.cLoc-eLoc], Loc: start}
+	return &token.Token{Cat: token.VALUE, Type: token.STRING, Literal: l.input[Loc : l.cLoc-eLoc], Loc: start}
 }
 
 func (l *Lexer) readToEol() {
@@ -290,11 +291,11 @@ func (l *Lexer) readToEol() {
 	}
 }
 
-func (l *Lexer) newToken(tokenType token.TokenType, ch rune, Loc ...token.Pos) token.Token {
+func (l *Lexer) newToken(tokenType token.TokenType, ch rune, Loc ...token.Pos) *token.Token {
 	if len(Loc) > 0 {
-		return token.Token{Cat: token.NONVALUE, Type: tokenType, Literal: string(ch), Loc: Loc[0]}
+		return &token.Token{Cat: token.NONVALUE, Type: tokenType, Literal: string(ch), Loc: Loc[0]}
 	}
-	return token.Token{Cat: token.NONVALUE, Type: tokenType, Literal: string(ch), Loc: token.Pos{l.Line, l.Col}}
+	return &token.Token{Cat: token.NONVALUE, Type: tokenType, Literal: string(ch), Loc: token.Pos{l.Line, l.Col}}
 }
 
 // func (l *Lexer) GetLoc() *token.Pos {

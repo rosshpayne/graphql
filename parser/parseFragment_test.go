@@ -547,12 +547,11 @@ func TestFragmentDirectives(t *testing.T) {
 	   }
 	   	appearsIn
 	  }
-	  #rightComparison: hero(episode: EMPIRE ) {
-	  #  ...comparisonFields @include(if: $expandedInfo) # fragment spread with directive (can be different to directives in fragment statement)
-	  #}
-	  #lowerComparison: hero(episode: EMPIRE ) {
-	  #  ...comparisonFields @include(if: $expandedInfo)	# fragment spread with directive
-	  #}
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields @include(if: $expandedInfo) # fragment spread with directive (can be different to directives in fragment statement)
+	    MyName: name
+	  }
+
 	}
 
 
