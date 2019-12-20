@@ -1814,9 +1814,11 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					// check response Type name must match expected type name e.g. Person is the type name for a sdl.Object_
 					//
 					if respObj.TypeName() != x.TypeName() {
-						p.addErr(fmt.Sprintf(`Response type "%s" does not match Fragment type "%s"`, responseType, x.TypeName()))
-						p.abort = true
-						return
+						//p.addErr(fmt.Sprintf(`Response type "%s" does not match Fragment type "%s"`, responseType, x.TypeName()))
+						fmt.Printf(`Response type "%s" does not match Fragment type "%s" %s`, responseType, x.TypeName(), "\n")
+						continue
+						// p.abort = true
+						// return
 					}
 					//
 					// Directives on fragment (based on Object)	// TODO create go test cases with directives
@@ -1914,8 +1916,9 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 				// process directives
 				//
 				for _, v := range qry.Directives {
-					//... @include(if: $expandedInfo) {
-					if v.Name_.String() == "@include" {
+					switch v.Name_.String() {
+					case "@include":
+						//... @include(if: $expandedInfo) {
 						for _, arg := range v.Arguments {
 							if arg.Name.String() != "if" {
 								p.addErr(fmt.Sprintf(`Expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
@@ -1928,7 +1931,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 
 							}
 						}
-					} else {
+					default:
 						fmt.Println("no @include directive")
 						p.executeStmt_(rootFrag, qry.SelectionSet, rootPath, responseType, responseItems, out)
 					}
