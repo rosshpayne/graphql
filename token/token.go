@@ -1,5 +1,9 @@
 package token
 
+import (
+	"fmt"
+)
+
 type TokenType string
 type TokenCat string
 
@@ -87,6 +91,10 @@ type Token struct {
 	Literal      string // string value of token - rune, string, int, float, bool
 	Loc          Pos    // start location (line,col) of token
 	Illegal      bool
+}
+
+func (t *Token) AtPosition() string {
+	return fmt.Sprintf("at position, line: %d, column: %d\n", t.Loc.Line, t.Loc.Col)
 }
 
 var keywords = map[string]struct {

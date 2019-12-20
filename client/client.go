@@ -573,16 +573,18 @@ var ResolverHero = func(ctx context.Context, resp sdl.InputValueProvider, args s
 			}
 		}
 		s.WriteString("] }")
+		// simulate very slow db access
 		time.Sleep(650 * time.Millisecond)
 		return s.String()
 	}
 
 	gql := make(chan string)
 	go func() {
+		// blocing wait. Unblocked when server starts listening on gql channel or Done channel closed by timeout
 		select {
 		case <-ctx.Done():
 			return
-		case gql <- f(): // gql channel unblocks and executes f() immediately when GraphQL server starts listening on channel
+		case gql <- f():
 			return
 		}
 	}()

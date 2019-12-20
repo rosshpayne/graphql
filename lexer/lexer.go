@@ -1,7 +1,7 @@
 package lexer
 
 import (
-	_ "fmt"
+	"fmt"
 	"unicode"
 	"unicode/utf8"
 
@@ -36,6 +36,10 @@ func New(input string) *Lexer {
 	l := &Lexer{input: input, Line: 1}
 	l.readRune() // prime lexer struct
 	return l
+}
+
+func (l *Lexer) AtPosition() string {
+	return fmt.Sprintf("at line: %d, column: %d", l.Line, l.Col)
 }
 
 func (l *Lexer) NextToken() token.Token {

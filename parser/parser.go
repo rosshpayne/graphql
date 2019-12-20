@@ -151,10 +151,12 @@ func (p *Parser) nextToken(s ...string) {
 	if len(s) > 0 {
 		fmt.Printf("** Current Token: [%s] %s %s %s %s %s %s\n", s[0], p.curToken.Type, p.curToken.Literal, p.curToken.Cat, "Next Token:  ", p.peekToken.Type, p.peekToken.Literal)
 	}
+	//	if p.curToken != nil && p.curToken.Illegal {
 	if p.curToken.Illegal {
 		p.addErr(fmt.Sprintf("Illegal %s token, [%s]", p.curToken.Type, p.curToken.Literal))
 	}
 	// if $variable present then mark the identier as a VALUE
+	//	if p.curToken != nil && p.curToken.Literal == token.DOLLAR {
 	if p.curToken.Literal == token.DOLLAR {
 		p.peekToken.Cat = token.VALUE
 	}
@@ -220,6 +222,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 			api.Statements = append(api.Statements, stmt)
 			failed = true
 		}
+
 		if stmtAST != nil {
 			ast.Add2StmtCache(stmt.AST.StmtName(), stmt.AST)
 		}
@@ -302,16 +305,20 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		if stmt.Type != "fragment" {
 			continue
 		}
+		x, ok := stmt.AST.(*ast.FragmentStmt)
+		if !ok {
+			continue
+		}
 		// execute fragment statements first
 		// generic checks
 		p.resolveAllTypes(stmt.AST)
 		if p.hasError() {
 			return nil, p.perror
 		}
-		// check all fields belong to their respective root type
-		// check for duplicate fields
+		// check all fields belong to their respective root type & check for duplicate fields
 		p.checkFields(nil, stmt.AST)
-		stmt.AST.CheckIsInputType(&p.perror)
+		x.CheckOnCondType(&p.perror)
+		//	x.CheckIsInputType(&p.perror)
 		//
 		// add to cache
 		//
@@ -339,8 +346,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		if p.hasError() {
 			return nil, p.perror
 		}
-		// check all fields belong to their respective root type
-		// check for duplicate fields
+		// check all fields belong to their respective root type & check for duplicate fields
 		p.checkFields(stmt.RootAST, stmt.AST)
 		// type specific checks
 		stmt.AST.CheckIsInputType(&p.perror)
@@ -431,17 +437,13 @@ func (p *Parser) resolveAllTypes(stmt ast.StatementDef) {
 
 	//  unresolved should only contain non-scalar types known upto that point.
 	for tyName, ty := range unresolved { // unresolvedMap: [name]*Type
-		fmt.Println("*** unresolved entry: ", tyName)
 		ast_ := p.fetchAST(tyName)
 		// type ENUM values will have nil *Type
-		fmt.Println("Here..0")
 		if ast_ != nil {
-			fmt.Println("Here..1")
 			if ty != nil {
 				ty.AST = ast_
 				// if not scalar then check for unresolved types in nested type
 				if !ty.IsScalar() {
-					fmt.Println("Here..2 ", ast_)
 					p.resolveNestedType(ast_)
 				}
 			}
@@ -739,56 +741,54 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 
 		case *ast.InlineFragment:
 
+			// TODO - create inline fragment go tests with type condition and without a type condition
 			rootFrag := root
 			rootPath := pathRoot
 
-			if !qry.TypeCond.Exists() && len(qry.Directives) == 0 {
+			if !qry.TypeCond.Exists() {
+				// base type cond on query field's parent  type
+				//qry.TypeCond = sdl.Name_{Name: sdl.NameValue_(root.TypeName())}
+				qry.TypeCondAST = root
+			}
+			// check cond type is appropriate i.e object, interface, union
+			qry.CheckOnCondType(&p.perror)
+
+			rootFrag = qry.TypeCondAST
+			if !qry.TypeCond.Exists() {
+				rootPath += "/" + string(root.TypeName())
+			} else {
+				rootPath += "/" + qry.TypeCond.Name.String()
+			}
+
+			if len(qry.Directives) == 0 {
 
 				p.checkFields_(rootFrag, qry.SelectionSet, rootPath)
 
 			} else {
-
-				if qry.TypeCond.Exists() {
-					// reset root object
-					var ok bool
-					// type condition should exist in cache - populated during resolve types.
-					if rootFrag, ok = sdl.CacheFetch(qry.TypeCond.Name); !ok {
-						p.addErr(fmt.Sprintf(`Fragment type condition "%s" does not eqryist as fragment %s`, qry.TypeCond.Name, qry.TypeCond.AtPosition()))
-						return
-					}
-					rootPath += "/" + string(rootFrag.TypeName())
-				}
-
-				if len(qry.Directives) == 0 {
-
-					p.checkFields_(rootFrag, qry.SelectionSet, rootPath)
-
-				} else {
-					//
-					// process directives
-					//
-					for _, v := range qry.Directives {
-						//... @include(if: $expandedInfo) {
-						if v.Name_.String() == "@include" {
-							for _, arg := range v.Arguments {
-								if arg.Name.String() != "if" {
-									p.addErr(fmt.Sprintf(`Expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
-									return
-								}
-								// parse wil have populated argument value with variable value.
-								argv := arg.Value.InputValueProvider.(sdl.Bool_)
-								if argv == true {
-									p.checkFields_(rootFrag, qry.SelectionSet, rootPath)
-								}
+				//
+				// process directives
+				//
+				for _, v := range qry.Directives {
+					//... @include(if: $expandedInfo) {
+					if v.Name_.String() == "@include" {
+						for _, arg := range v.Arguments {
+							if arg.Name.String() != "if" {
+								p.addErr(fmt.Sprintf(`Expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
+								return
 							}
-						} else {
-							fmt.Println("no @include directive")
-							p.checkFields_(rootFrag, qry.SelectionSet, rootPath)
+							// parse wil have populated argument value with variable value. //TODO - not working when no default value specified
+							argv := arg.Value.InputValueProvider.(sdl.Bool_)
+							if argv == true {
+								p.checkFields_(rootFrag, qry.SelectionSet, rootPath)
+							}
 						}
+					} else {
+						fmt.Println("no @include directive")
+						p.checkFields_(rootFrag, qry.SelectionSet, rootPath)
 					}
 				}
 			}
-		}
+		} // switch
 	}
 }
 
@@ -873,7 +873,8 @@ func (p *Parser) executeStmtOp(root sdl.GQLTypeProvider, qryFld ast.SelectionSet
 
 func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetProvider, pathRoot string, responseType string, responseItems sdl.InputValueProvider, out *strings.Builder) { //type ObjectVals []*ArgumentT - serialized object
 	//func (p *Parser) executeStmt_(root sdl.FieldSetter, set []ast.SelectionSetProvider, pathRoot string, responseItems sdl.InputValueProvider, out *strings.Builder) { //type ObjectVals []*ArgumentT - serialized object
-	// ty_ (object):  type Query { allPersons(last : Int ) : [Person!]! }	<== root type, Person.  Provides actual type information associated with query field.
+	//
+	// ty_ (object):  type Query { allPersons(last : Int ) : [Person!]! }	<== root type, Person.  Defines the type associated with the query field.
 	//
 	// 	stmt:	`query XYZ {												<== query statement (what to display)
 	//      allPersons(last: 2 ) {											<== resolver here - generates data below
@@ -954,8 +955,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 	//
 	// loop on query fields (selection set passed in - initially "query stmt" selection set, usually one field)
 	//
-	//	 loop on root-type fields
-	//    on match by name
+	//	 for root field associated with query field
 	//
 	//		field type is Object -- AAA ----
 	//
@@ -991,12 +991,9 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 	//			validate response for current field type
 	//			output query JSON for field (as either List or single field)
 	//
-	//  on inline-Fragment type
+	//  on inline-Fragment type...
+	//  on fragmentspread type...
 	//
-	//
-	// var (
-	// 	rootObj *sdl.Object_
-	// )
 
 	if p.hasError() {
 		return
@@ -1288,13 +1285,11 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					defer cancel()
 					//
 					rch := qry.Resolver(ctx, resp, qry.Arguments)
-
+					// blocking wait
 					select {
 					case <-ctx.Done():
 						ctxMsg = `Resolver for "%s" timed out and consequently`
-						break
 					case response = <-rch:
-						break
 					}
 
 					fmt.Printf(`>>>>>>>  response: "%s"\n`, response)
@@ -1551,7 +1546,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 										if y[i].IsType().String() != rootFld.Type.Name.String() {
 											if !(y[i].IsType().String() == "Enum" && sdl.BaseType(rootFld.Type.AST) == "E") {
 												if _, ok := y[i].InputValueProvider.(sdl.Null_); !ok {
-													p.addErr(fmt.Sprintf(`55 Expected "%s" got %s for "%s" %s`, rootFld.Type.Name_.String(), y[i].IsType(), qry.Name, qry.Name.AtPosition()))
+													p.addErr(fmt.Sprintf(`Expected "%s" got %s for "%s" %s`, rootFld.Type.Name_.String(), y[i].IsType(), qry.Name, qry.Name.AtPosition()))
 												} else {
 													var bit byte = 1
 													bit &= rootFld.Type.Constraint >> uint(d)
@@ -1567,17 +1562,16 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 								}
 							}
 						}
-						fmt.Println("List - scalar.....")
+
 						writeout(fieldPath, out, "[ ", noNewLine)
 						f(riv, 1)
 						writeout(fieldPath, out, "] ", noNewLine)
-						fmt.Println("List - scalar.....finished ")
 
 					case sdl.String_:
 						// TODO: remove this case - using "null" to represent null value in response string
 						var bit byte = 1
 						if rootFld.Type.Name.String() != riv.IsType().String() {
-							p.addErr(fmt.Sprintf(`2 Expected "%s" got %s %s`, rootFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
+							p.addErr(fmt.Sprintf(`Expected "%s" got %s %s`, rootFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
 							return
 						}
 						bit &= rootFld.Type.Constraint
@@ -1652,16 +1646,15 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 						p.abort = true
 						return
 					}
+					// create timeout context and pass to Resolver
 					ctx, cancel := context.WithTimeout(context.Background(), ResolverTimeoutMS*time.Millisecond)
 					defer cancel()
 					// execute resolver using response data for field
 					rch := qry.Resolver(ctx, resp, qry.Arguments)
-
+					// blocking wait
 					select {
 					case <-ctx.Done():
-						break
 					case response = <-rch:
-						break
 					}
 
 					fmt.Println("Response >>>>> ", response)
@@ -1764,14 +1757,14 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 			// ...FragmentName	Directives-opt
 			//  TODO - check that type of parent object of field matches the fragment typeCond
 			fmt.Println("FRAGMENT SPREAD.........")
-			//
-			// check include directive present
-			//
 			var (
 				displayFrg bool = true
 				// dir        sdl.Directives_
 				// sset       sdl.SelectionGetter
 			)
+			//
+			// check include directive present
+			//
 			for _, d := range qry.Directives {
 				//... @include(if: $expandedInfo) {
 				if d.Name_.String() == "@include" {
@@ -1826,7 +1819,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 						return
 					}
 					//
-					// Directives on fragment (based on Object)
+					// Directives on fragment (based on Object)	// TODO create go test cases with directives
 					//
 					for _, d := range qry.FragStmt.Directives {
 						//... @include(if: $expandedInfo) {
@@ -1902,31 +1895,46 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 
 			// InlineFragment
 			// ...TypeCondition-opt	Directives-opt	SelectionSet
-
-			fmt.Println("====== ast.InlineFragment=======")
-			rootFrag := root // where there is no typeCond the substitute is the root as it defines the type and therefore the fields for the current data record.
-			// When the root type is an Interface, then any record that has a field
+			//rootFrag := root
 			rootPath := pathRoot
+			rootFrag := qry.TypeCondAST
 
-			if !qry.TypeCond.Exists() && len(qry.Directives) == 0 {
+			if !qry.TypeCond.Exists() {
+				rootPath += "/" + string(root.TypeName())
+			} else {
+				rootPath += "/" + qry.TypeCond.Name.String()
+			}
+
+			if len(qry.Directives) == 0 {
 
 				p.executeStmt_(rootFrag, qry.SelectionSet, rootPath, responseType, responseItems, out)
 
 			} else {
+				//
+				// process directives
+				//
+				for _, v := range qry.Directives {
+					//... @include(if: $expandedInfo) {
+					if v.Name_.String() == "@include" {
+						for _, arg := range v.Arguments {
+							if arg.Name.String() != "if" {
+								p.addErr(fmt.Sprintf(`Expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
+								return
+							}
+							// parse wil have populated argument value with variable value.
+							argv := arg.Value.InputValueProvider.(sdl.Bool_)
+							if argv == true {
+								p.executeStmt_(rootFrag, qry.SelectionSet, rootPath, responseType, responseItems, out)
 
-				var frgStmt *ast.FragmentStmt
-
-				if qry.TypeCond.Exists() {
-					// TODO - check typeCond has been properly validated in checkFieldss
-					// if stmtAST, ok := CacheFetchStmt(StmtName_(qry.TypeCond.String())); ok {
-					// 	if qry.TypeCond.String() ==
-					// }
-
-				} else {
-
-					p.executeStmt_(rootFrag, frgStmt.SelectionSet, rootPath, responseType, responseItems, out)
+							}
+						}
+					} else {
+						fmt.Println("no @include directive")
+						p.executeStmt_(rootFrag, qry.SelectionSet, rootPath, responseType, responseItems, out)
+					}
 				}
 			}
+
 		}
 	}
 }
@@ -1941,7 +1949,7 @@ func (p *Parser) parseOperationStmt(op string) ast.StatementDef {
 	)
 	switch p.curToken.Type {
 	case token.QUERY, token.MUTATION, token.SUBSCRIPTION, token.FRAGMENT:
-		p.nextToken("here... read over query") // read over query, mutation keywords
+		p.nextToken() // read over query, mutation keywords
 	}
 	stmt := &ast.OperationStmt{Type: op}
 	p.root = stmt //TODO - what is this??
@@ -2027,10 +2035,12 @@ func (p *Parser) parseFragmentSpread() ast.SelectionSetProvider {
 
 func (p *Parser) parseInlineFragment(f ast.HasSelectionSetProvider) ast.SelectionSetProvider {
 
-	frag := &ast.InlineFragment{Parent: f}
-	p.nextToken() // read over ...
+	frag := &ast.InlineFragment{}               //{Parent: f}
+	p.nextToken("inlinefragment read over ...") // read over ...
 
 	p.parseTypeCondition(frag, opt).parseDirectives(frag, opt).parseSelectionSet(frag)
+
+	fmt.Printf("ineline fragment:  %#v\n", frag)
 
 	return frag
 }
@@ -2153,8 +2163,8 @@ func (p *Parser) parseArguments(f sdl.ArgumentAppender, optional ...bool) *Parse
 			return p.addErr(fmt.Sprintf(`Expected an argument name followed by colon got an "%s %s"`, p.curToken.Literal, p.peekToken.Literal))
 		}
 		v.AssignName(p.curToken.Literal, p.Loc(), &p.perror)
-		p.nextToken("here..")   // read over :
-		p.nextToken("here....") // argument value
+		p.nextToken() // read over :
+		p.nextToken() // argument value
 		// if !((p.curToken.Cat == token.VALUE && (p.curToken.Type == token.DOLLAR && p.peekToken.Cat == token.VALUE)) ||
 		// 	(p.curToken.Cat == token.VALUE && (p.peekToken.Cat == token.NONVALUE || p.peekToken.Type == token.RPAREN)) ||
 		// 	(p.curToken.Type == token.LBRACKET || p.curToken.Type == token.LBRACE)) { // [  or {
@@ -2181,7 +2191,7 @@ func (p *Parser) parseArguments(f sdl.ArgumentAppender, optional ...bool) *Parse
 		//f.Arguments = append(f.Arguments, v)
 		f.AppendArgument(v)
 	}
-	p.nextToken("After parseINputValue.cc.") // prime for next parse op
+	p.nextToken() // prime for next parse op
 	return p
 }
 
@@ -2218,7 +2228,7 @@ func (p *Parser) parseDirectives(f sdl.DirectiveAppender, optional ...bool) *Par
 		return nil
 	}
 	for p.curToken.Type == token.ATSIGN {
-		p.nextToken() // read over @
+		p.nextToken("in parseDirectives . Read over @") // read over @
 		a := []*sdl.ArgumentT{}
 		d := &sdl.DirectiveT{Arguments_: sdl.Arguments_{Arguments: a}} // popluate with receiver value for p.parseArguments(d) in parseDirective
 		if err := parseArgument(d); err != nil {
@@ -2246,10 +2256,10 @@ func (p *Parser) parseSelectionSet(f ast.HasSelectionSetProvider, optional ...bo
 	if p.hasError() {
 		return p
 	}
-
+	p.printToken("parseSelectionSEt")
 	if p.curToken.Type != token.LBRACE {
 		if len(optional) == 0 {
-			p.addErr("Expect a selection set")
+			p.addErr(fmt.Sprintf("Expect a selection set %s", p.l.AtPosition()))
 		}
 		return p
 	}
@@ -2321,20 +2331,20 @@ func (p *Parser) parseVariables(st ast.OperationDef, optional ...bool) *Parser {
 		p.nextToken()
 		if p.curToken.Type != token.DOLLAR {
 			p.addErr(fmt.Sprintf(`Expected "$" got "%s"`, p.curToken.Literal))
-			return true
+			return false
 		}
 		p.nextToken() // read over name identifer
 
 		if !(p.curToken.Type == token.IDENT && p.peekToken.Type == token.COLON) {
 			p.addErr(fmt.Sprintf(`Expected an identifer got an "%s" value "%s"`, p.curToken.Type, p.curToken.Literal))
-			return true
+			return false
 		}
 		v.AssignName(p.curToken.Literal, p.Loc(), &p.perror)
 		p.nextToken()
 		// :
 		if p.curToken.Type != token.COLON {
 			p.addErr(fmt.Sprintf(`Expected : got a "%s" value "%s"`, p.curToken.Type, p.curToken.Literal))
-			return true
+			return false
 		}
 		p.nextToken() // read over :
 		p.parseType(v)
@@ -2342,19 +2352,15 @@ func (p *Parser) parseVariables(st ast.OperationDef, optional ...bool) *Parser {
 			//	p.nextToken() // read over Datatype
 			p.nextToken() // read over ASSIGN
 			v.DefaultVal = p.parseInputValue_()
-			return true
 		}
-		return false
-	}
-
-	if p.hasError() {
-		return p
+		return true
 	}
 
 	switch stmt := st.(type) {
 	case *ast.OperationStmt:
+		p.printToken("In variable..")
 		if p.curToken.Type == token.LPAREN {
-			for ; p.curToken.Type != token.RPAREN; p.nextToken() {
+			for p.curToken.Type != token.RPAREN { //p.nextToken("Next... should be )") {
 
 				v := ast.VariableDef{}
 
@@ -2363,12 +2369,14 @@ func (p *Parser) parseVariables(st ast.OperationDef, optional ...bool) *Parser {
 				} else {
 					return p
 				}
+				fmt.Printf("variable: %#v\n", v)
 			}
 			p.rootVar = stmt.Variable
-			//xyz	p.nextToken() //read over )
+			p.nextToken("read over )..") //read over )
 		} else if len(optional) == 0 { // if argument exists its optional
 			p.addErr("Variables are madatory")
 		}
+		//p.nextToken()
 	default:
 		p.addErr("Variables are only permitted in Operational statements")
 	}

@@ -122,6 +122,7 @@ type FragmentDef interface {
 	GetSelectionSet() []SelectionSetProvider
 	AssignTypeCond(string, *sdl.Loc_, *[]error)
 	//	Executable
+	CheckOnCondType(*[]error)
 }
 
 // // == ExecutableDefinition - end
@@ -195,8 +196,12 @@ func (o *OperationStmt) CheckIsInputType(err *[]error) {
 func (o *OperationStmt) String() string { // Query will now satisfy Node interface and complete StatementDef
 	var s strings.Builder
 
-	if len(o.Name.Name) > 0 {
-		s.WriteString(fmt.Sprintf("\n %s %s", o.Type, o.Name))
+	if !o.Name.Exists() || o.Name.Name[:2] == "__" {
+		if o.Name.Name[:2] == "__" {
+			s.WriteString(fmt.Sprintf("\n %s ", o.Type))
+		} else {
+			s.WriteString(fmt.Sprintf("\n %s %s", o.Type, o.Name))
+		}
 	} else {
 		s.WriteString(fmt.Sprintf("%s ", o.Type))
 	}
@@ -249,7 +254,8 @@ type FragmentStmt struct {
 	//
 	Name sdl.Name_
 	// on <type>
-	TypeCond sdl.Name_
+	TypeCond    sdl.Name_
+	TypeCondAST sdl.GQLTypeProvider
 	sdl.Directives_
 	SelectionSet []SelectionSetProvider // inline fragments, fragment spreads, sdl field from sdl type TypeCond.
 }
@@ -271,8 +277,8 @@ func (f *FragmentStmt) AppendSelectionSet(ss SelectionSetProvider) {
 	//		InlineFragment
 	f.SelectionSet = append(f.SelectionSet, ss)
 }
-func (f *FragmentStmt) CheckIsInputType(err *[]error) {
-}
+
+func (f *FragmentStmt) CheckIsInputType(err *[]error) {}
 
 func (f *FragmentStmt) StmtType() string {
 	return "Fragment"
@@ -326,6 +332,20 @@ func (f *FragmentStmt) CheckUnresolvedTypes(unresolved sdl.UnresolvedMap) {
 	}
 }
 
+func (f *FragmentStmt) CheckOnCondType(err *[]error) {
+	x, ok := sdl.CacheFetch(f.TypeCond.Name)
+	if !ok {
+		*err = append(*err, fmt.Errorf(`Type Condition for fragment "%s" not found`, f.Name))
+		return
+	}
+	switch x.(type) {
+	case *sdl.Object_, *sdl.Union_, *sdl.Interface_:
+		f.TypeCondAST = x
+	default:
+		*err = append(*err, fmt.Errorf(`Type Condition "%s" for fragment "%s" must be an Object, Union or Interface %s`, f.TypeCond, f.Name, f.Name.AtPosition()))
+	}
+}
+
 func (f *FragmentStmt) StmtName() StmtName_ {
 	return StmtName_(f.Name.String())
 }
@@ -372,8 +392,9 @@ func (f *FragmentSpread) String() string {
 
 type InlineFragment struct {
 	//
-	Parent   HasSelectionSetProvider
-	TypeCond sdl.Name_ // supplied by typeCondition if specified, otherwise its the type of the parent object's selectionset.
+	//Parent      HasSelectionSetProvider
+	TypeCond    sdl.Name_ // supplied by typeCondition if specified, otherwise its the type of the parent object's selectionset.
+	TypeCondAST sdl.GQLTypeProvider
 	//
 	sdl.Directives_
 	SelectionSet []SelectionSetProvider // { only fields and ... fragments. Nil when no TypeCond and adopts selectionSet of enclosing context.
@@ -410,6 +431,23 @@ func (f *InlineFragment) AssignTypeCond(input string, loc *sdl.Loc_, err *[]erro
 
 func (f *InlineFragment) GetSelectionSet() []SelectionSetProvider {
 	return f.SelectionSet
+}
+
+func (f *InlineFragment) CheckOnCondType(err *[]error) {
+	if len(f.TypeCond.Name) == 0 {
+		return
+	}
+	x, ok := sdl.CacheFetch(f.TypeCond.Name)
+	if !ok {
+		*err = append(*err, fmt.Errorf(`Type Condition for inline fragment not found`))
+		return
+	}
+	switch x.(type) {
+	case *sdl.Object_, *sdl.Union_, *sdl.Interface_:
+		f.TypeCondAST = x
+	default:
+		*err = append(*err, fmt.Errorf(`Type Condition "%s" for inline fragment must be an Object, Union or Interface`, f.TypeCond))
+	}
 }
 
 func (f *InlineFragment) String() string { // Query will now satisfy Node interface and complete StatementDef

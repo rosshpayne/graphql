@@ -538,34 +538,30 @@ fragment comparisonFields on Character {
 func TestFragmentDirectives(t *testing.T) {
 
 	var input = `query ($expandedInfo: Boolean = true) {
-	  leftComparison: hero(episode: NEWHOPE) {
-	    ...comparisonFields								# fragment spread no directives
+	leftComparison: hero(episode: NEWHOPE) {
+	   ...comparisonFields								# fragment spread no directives
 	  }
 	  middleComparision: hero(episode: JEDI ) {
-	    ... @include(if: $expandedInfo)					# inlinefragment (ie. no fragment name) with directive
+	   ...@include(if: $expandedInfo) {					# inlinefragment (ie. no fragment name) with directive
 	    	...comparisonFields
-	    	appearsIn
+	   }
+	   	appearsIn
 	  }
-	  rightComparison: hero(episode: EMPIRE ) {
-	    ...comparisonFields @include(if: $expandedInfo) # fragment spread with directive (can be different to directives in fragment statement)
-	  }
-	  lowerComparison: hero(episode: EMPIRE ) {
-	    ...comparisonFields @include(if: $expandedInfo)	# fragment spread with directive
-	  }
+	  #rightComparison: hero(episode: EMPIRE ) {
+	  #  ...comparisonFields @include(if: $expandedInfo) # fragment spread with directive (can be different to directives in fragment statement)
+	  #}
+	  #lowerComparison: hero(episode: EMPIRE ) {
+	  #  ...comparisonFields @include(if: $expandedInfo)	# fragment spread with directive
+	  #}
 	}
 
-fragment nestedField2 on Character {
-	name
-}
-fragment nestedField1 on Character @include(if: $expandedInfo) {	# fragment stmt with directive 
-	appearsIn
-}
+
 fragment comparisonFields on Character {							# fragment stmt no directives
-  ...nestedField1
+  name
   friends {
     name
   }
-  ...nestedField2
+  appearsIn
 }
 `
 
@@ -581,7 +577,9 @@ fragment comparisonFields on Character {							# fragment stmt no directives
 	//	p.ClearCache()
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
-	fmt.Println(d.String())
+	if d != nil {
+		fmt.Println(d.String())
+	}
 	for _, ex := range expectedErr {
 		if len(ex) == 0 {
 			break
@@ -607,10 +605,12 @@ fragment comparisonFields on Character {							# fragment stmt no directives
 			t.Errorf(`Unexpected Error = [%q]`, got.Error())
 		}
 	}
-	if compare(d.String(), input) {
-		t.Errorf("Got:      [%s] \n", trimWS(d.String()))
-		t.Errorf("Expected: [%s] \n", trimWS(input))
-		t.Errorf(`Unexpected: program.String() wrong. `)
+	if d != nil {
+		if compare(d.String(), input) {
+			t.Errorf("Got:      [%s] \n", trimWS(d.String()))
+			t.Errorf("Expected: [%s] \n", trimWS(input))
+			t.Errorf(`Unexpected: program.String() wrong. `)
+		}
 	}
 }
 
