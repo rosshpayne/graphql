@@ -495,7 +495,7 @@ func (p *Parser) resolveNestedType(v sdl.GQLTypeProvider) {
 //  As each statement is parsed its types are added to the cache
 //  During validation phase each type is checked for existence using this func.
 //  if not in cache then looks at DB for types that have been predefined.
-var mu sync.Mutex
+var mu sync.RWMutex
 
 func (p *Parser) fetchAST(name sdl.Name_) sdl.GQLTypeProvider {
 
@@ -504,20 +504,23 @@ func (p *Parser) fetchAST(name sdl.Name_) sdl.GQLTypeProvider {
 		ok   bool
 	)
 	name_ := name.Name
-	mu.Lock()
-	defer mu.Unlock()
+	mu.RLock()
+	//defer mu.Unlock()
 	if ast_, ok = sdl.CacheFetch(name_); !ok {
 
 		if !typeNotExists[name_] {
-
+			mu.RUnlock()
+			mu.Lock()
 			if typeDef, err := sdl.DBFetch(name_); err != nil {
 				p.addErr(err.Error())
 				p.abort = true
+				mu.Unlock()
 				return nil
 			} else {
 				if len(typeDef) == 0 { // no type found in DB
 					// mark type as being nonexistent
 					typeNotExists[name_] = true
+					mu.Unlock()
 					return nil
 
 				} else {
@@ -541,14 +544,16 @@ func (p *Parser) fetchAST(name sdl.Name_) sdl.GQLTypeProvider {
 					err := p2.ResolveAllTypes(ast_)
 
 					p.perror = append(p.perror, err...)
+					mu.Unlock()
 					return ast_
-
 				}
 			}
 		} else {
+			mu.Unlock()
 			return nil
 		}
 	}
+	mu.RUnlock()
 	return ast_
 }
 
@@ -1226,7 +1231,6 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 							for _, v := range y {
 								fmt.Println("embedded type for ObjectVals: ", v.Name_, v.Value.InputValueProvider.IsType())
 							}
-							//respType = ??
 
 						default:
 							// scalar types, Int, Float, String, EnumValues - as rootFld.Type is an Object (see above), scalars should not appear here.
@@ -1292,7 +1296,8 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					case response = <-rch:
 					}
 
-					fmt.Printf(`>>>>>>>  response: "%s"\n`, response)
+					fmt.Printf(`>>>>>>>  response: %s`, response)
+					fmt.Println()
 					//
 					// respone returns an object that matches the root i.e. Person, Pet, Address, Business
 					//
@@ -1474,7 +1479,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 						}
 					}
 					if resp == nil {
-						p.addErr(fmt.Sprintf("No corresponding root field found from response "))
+						p.addErr(fmt.Sprintf("No corresponding root field found from response field"))
 						p.abort = true
 						return
 					}
@@ -1634,6 +1639,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					var resp sdl.InputValueProvider
 					switch y := responseItems.(type) {
 					case sdl.ObjectVals:
+						fmt.Println("123 responseItems : ", y.String())
 						for _, response := range y {
 							// find response field by matching name against root field and grab the associated response field data.
 							if response.Name.EqualString(rootFld.Name_.String()) { // name
@@ -1813,12 +1819,9 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					//
 					// check response Type name must match expected type name e.g. Person is the type name for a sdl.Object_
 					//
-					if respObj.TypeName() != x.TypeName() {
-						//p.addErr(fmt.Sprintf(`Response type "%s" does not match Fragment type "%s"`, responseType, x.TypeName()))
+					if responseType != x.TypeName().String() { //respObj.TypeName() != x.TypeName() {
 						fmt.Printf(`Response type "%s" does not match Fragment type "%s" %s`, responseType, x.TypeName(), "\n")
 						continue
-						// p.abort = true
-						// return
 					}
 					//
 					// Directives on fragment (based on Object)	// TODO create go test cases with directives
@@ -1844,9 +1847,6 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 						//
 						p.executeStmt_(root, qry.FragStmt.SelectionSet, pathRoot, responseType, responseItems, out)
 					}
-
-					// dir = respObj.Directives_
-					// sset = respObj.FieldSet
 
 				case *sdl.Interface_:
 					//
@@ -1897,14 +1897,21 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 
 			// InlineFragment
 			// ...TypeCondition-opt	Directives-opt	SelectionSet
-			//rootFrag := root
+			//
 			rootPath := pathRoot
-			rootFrag := qry.TypeCondAST
+			rootFrag := qry.TypeCondAST // inline frag points to parent type (the root)
 
 			if !qry.TypeCond.Exists() {
 				rootPath += "/" + string(root.TypeName())
 			} else {
 				rootPath += "/" + qry.TypeCond.Name.String()
+			}
+			//
+			// check response data {reponseType:responseItems} against expected field type (contained in root)
+			//
+			if responseType != rootFrag.TypeName().String() {
+				fmt.Printf(`Response type "%s" does not match Fragment type "%s" %s`, responseType, rootFrag.TypeName(), "\n")
+				continue
 			}
 
 			if len(qry.Directives) == 0 {
@@ -2043,7 +2050,7 @@ func (p *Parser) parseInlineFragment(f ast.HasSelectionSetProvider) ast.Selectio
 
 	p.parseTypeCondition(frag, opt).parseDirectives(frag, opt).parseSelectionSet(frag)
 
-	fmt.Printf("ineline fragment:  %#v\n", frag)
+	fmt.Printf("ineline fragment:  %#v %s\n", frag, frag.String())
 
 	return frag
 }
@@ -2302,10 +2309,11 @@ func (p *Parser) parseSelectionSet(f ast.HasSelectionSetProvider, optional ...bo
 		if p.hasError() {
 			break
 		}
+
 		f.AppendSelectionSet(node) // append each selection set current receiver.
 
 	}
-	p.nextToken() // read over }
+	p.nextToken("read over }") // read over }
 	//
 	return p
 }
