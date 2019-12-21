@@ -696,21 +696,20 @@ func TestInlineFragmentDirectives(t *testing.T) {
 	leftComparison: hero(episode: NEWHOPE) {
 	   ...comparisonFields								# fragment spread no directives
 	  }
-	  middleComparision: hero(episode: JEDI ) {
-	   ...@include(if: $expandedInfo) {					# inlinefragment (ie. no fragment name) with directive
+	  middleComparision: hero(episode: NEWHOPE ) {
+	   ...@include (if: $expandedInfo) {				# inlinefragment (ie. no fragment name) with directive
 	    	...comparisonFields
 	   }
 	   	appearsIn
 	  }
 	  rightComparison: hero(episode: EMPIRE ) {
 	    ...comparisonFields @include(if: $expandedInfo) # fragment spread with directive (can be different to directives in fragment statement)
-	    MyName: name
+	            MyName: name
 	  }
-
 	}
 
 
-fragment comparisonFields on Character {							# fragment stmt no directives
+fragment comparisonFields on Character {				# fragment stmt no directives
   name
   friends {
     name

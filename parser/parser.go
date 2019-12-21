@@ -1898,20 +1898,51 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 			// InlineFragment
 			// ...TypeCondition-opt	Directives-opt	SelectionSet
 			//
-			rootPath := pathRoot
-			rootFrag := qry.TypeCondAST // inline frag points to parent type (the root)
+			var rootFrag sdl.GQLTypeProvider
 
+			rootPath := pathRoot
+			//
+			//  existence of type condition determines query root type (i.e. the type associated with the query field)
+			//
 			if !qry.TypeCond.Exists() {
+				rootFrag = root
 				rootPath += "/" + string(root.TypeName())
 			} else {
+				rootFrag = qry.TypeCondAST // inline frag points to parent type (the root)
 				rootPath += "/" + qry.TypeCond.Name.String()
 			}
 			//
-			// check response data {reponseType:responseItems} against expected field type (contained in root)
+			// check response data {reponseType:responseItems} against the field type (determined by type condition for inline frags - see prevous stmt)
 			//
-			if responseType != rootFrag.TypeName().String() {
-				fmt.Printf(`Response type "%s" does not match Fragment type "%s" %s`, responseType, rootFrag.TypeName(), "\n")
-				continue
+			respType := p.fetchAST(sdl.Name_{Name: sdl.NameValue_(responseType)})
+			if respType == nil {
+				p.addErr(fmt.Sprintf(`Response type "%s" not defined in Graphql respository"`, responseType))
+				return
+			}
+			respObj, ok := respType.(*sdl.Object_)
+			if !ok {
+				p.addErr(fmt.Sprintf(`Response type "%s" is not a Graphql Object`, responseType))
+				p.abort = true
+				return
+			}
+			switch rtg := rootFrag.(type) {
+			case *sdl.Interface_:
+				var found bool
+				// check if response object implements interface
+				for _, v := range respObj.Implements {
+					if v.Equals(rtg.Name_) {
+						found = true
+					}
+				}
+				if !found {
+					// does not implement interface - proceed to next field
+					continue
+				}
+			default:
+				if responseType != rootFrag.TypeName().String() {
+					fmt.Printf(`Response type "%s" does not match Fragment type "%s" %s`, responseType, rootFrag.TypeName(), "\n")
+					continue
+				}
 			}
 
 			if len(qry.Directives) == 0 {
