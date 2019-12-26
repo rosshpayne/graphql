@@ -1,7 +1,6 @@
 package ast
 
 import (
-	"errors"
 	"fmt"
 	"log"
 
@@ -25,10 +24,6 @@ type TypeRow struct {
 	Type  string //TODO: is this necessary?  Reason: is saves having to parse stmt in order to determine its "type"
 }
 
-// cache returns the AST type for a given TypeName
-type StmtName_ string
-type stmtCache map[StmtName_]StatementDef
-
 type PkRow struct {
 	PKey  string
 	SortK string
@@ -37,12 +32,10 @@ type PkRow struct {
 var (
 	document   string
 	defaultDoc string
-	stmtCache_ stmtCache
 	db         *dynamodb.DynamoDB
 )
 
 func init() {
-	stmtCache_ = make(stmtCache)
 
 	dynamodbService := func() *dynamodb.DynamoDB {
 		sess, err := session.NewSession(&aws.Config{
@@ -70,45 +63,6 @@ func SetDefaultDoc(doc string) {
 // func Fetch(input NameValue_) (StatementDef, bool) {
 // 	return CacheFetch(input)
 // }
-
-func CacheClear() {
-	fmt.Println("******************************************")
-	fmt.Println("************ CLEAR CACHE *****************")
-	fmt.Println("******************************************")
-	stmtCache_ = map[StmtName_]StatementDef{} // map literal to zero cache
-}
-func CacheFetchStmt(input StmtName_) (StatementDef, bool) {
-
-	if len(input) == 0 {
-		input = "__NONAME"
-	}
-	if ast, ok := stmtCache_[input]; !ok {
-		fmt.Printf("** QL CacheFetchStmt [%s] NOT FOUND \n", input)
-		return nil, false
-	} else {
-		fmt.Printf("** QL CacheFetchStmt [%s] found \n", input)
-		return ast, true
-	}
-}
-
-func Add2StmtCache(input StmtName_, obj StatementDef) {
-
-	if len(input) == 0 {
-		panic(errors.New("Cannot add a statement to the cache without a name"))
-	}
-	fmt.Printf("** Add2stmtCache  x%sx [%s]\n", input, obj.String())
-	stmtCache_[input] = obj
-}
-
-func ListCache() []StatementDef {
-	l := make([]StatementDef, len(stmtCache_), len(stmtCache_))
-	i := 0
-	for _, v := range stmtCache_ {
-		l[i] = v
-		i++
-	}
-	return l
-}
 
 func DBFetch(name sdl.NameValue_) (string, error) {
 	//

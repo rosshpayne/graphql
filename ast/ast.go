@@ -6,9 +6,10 @@ import (
 	"strings"
 
 	sdl "github.com/graph-sdl/ast"
+	pse "github.com/graph-sdl/parser"
 )
 
-type UnresolvedMap sdl.UnresolvedMap //map[Name_]*sdl.Type_
+type UnresolvedMap sdl.UnresolvedMap //¬333map[Name_]*sdl.Type_
 
 // ============ InputValue VALUE node - must satisfy ValueI =======================
 
@@ -85,13 +86,15 @@ type SelectionSetProvider interface {
 	String() string
 }
 
+type StmtName_ string
+
 //========= statement def ============
 
 type StatementDef interface {
 	//Node()
 	StatementNode()
 	//TypeSystemNode()
-	CheckUnresolvedTypes(unresolved sdl.UnresolvedMap)
+	SolicitNonScalarTypes(unresolved sdl.UnresolvedMap)
 	CheckIsInputType(err *[]error)
 	CheckInputValueType(err *[]error)
 	StmtName() StmtName_
@@ -122,7 +125,7 @@ type FragmentDef interface {
 	GetSelectionSet() []SelectionSetProvider
 	AssignTypeCond(string, *sdl.Loc_, *[]error)
 	//	Executable
-	CheckOnCondType(*[]error)
+	CheckOnCondType(*[]error, *pse.Cache_)
 }
 
 // // == ExecutableDefinition - end
@@ -226,14 +229,14 @@ func (o *OperationStmt) String() string { // Query will now satisfy Node interfa
 	return s.String()
 }
 
-func (o *OperationStmt) CheckUnresolvedTypes(unresolved sdl.UnresolvedMap) {
+func (o *OperationStmt) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
 	// statements can have two entities that are unresolved.
 	//  either a type (SDL) or a fragment (statement). However SDL are only checked during checkField function.
 	// check any unresolved fragments
 	for _, v := range o.Variable {
 		v.checkUnresolvedTypes_(unresolved)
 	}
-	o.Directives_.CheckUnresolvedTypes(unresolved)
+	//	o.Directives_.SolicitNonScalarTypes(unresolved)
 	for _, v := range o.SelectionSet {
 		v.checkUnresolvedTypes_(unresolved)
 	}
@@ -314,7 +317,7 @@ func (f *FragmentStmt) String() string { // Query will now satisfy Node interfac
 	return s.String()
 }
 
-func (f *FragmentStmt) CheckUnresolvedTypes(unresolved sdl.UnresolvedMap) {
+func (f *FragmentStmt) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
 
 	// type Type_ struct {
 	// 	Constraint byte            // each on bit from right represents not-null constraint applied e.g. in nested list type [type]! is 00000010, [type!]! is 00000011, type! 00000001
@@ -322,19 +325,24 @@ func (f *FragmentStmt) CheckUnresolvedTypes(unresolved sdl.UnresolvedMap) {
 	// 	Depth      int             // depth of nested List e.g. depth 2 is [[type]]. Depth 0 implies non-list type, depth > 0 is a list type
 	// 	Name_                      // type name. inherit AssignName(). Use Name_ to access AST via cache lookup. ALternatively, use AST above or TypeFlag_ instead of string.
 	// }
-	if _, ok := sdl.CacheFetch(f.TypeCond.Name); !ok {
-		ty := sdl.Type_{Name_: f.TypeCond}
-		unresolved[f.TypeCond] = &ty
-	}
-	f.Directives_.CheckUnresolvedTypes(unresolved)
+	// TODO: do not reference cache in methods - performn in parser
+	// if pse.CacheFetch(f.TypeCond.Name) {
+	// 	ty := sdl.Type_{Name_: f.TypeCond}
+	unresolved[f.TypeCond] = nil //&ty
+	// }
+	//f.Directives_.SolicitNonScalarTypes(unresolved)
 	for _, v := range f.SelectionSet {
 		v.checkUnresolvedTypes_(unresolved)
 	}
 }
 
-func (f *FragmentStmt) CheckOnCondType(err *[]error) {
-	x, ok := sdl.CacheFetch(f.TypeCond.Name)
-	if !ok {
+func (f *FragmentStmt) CheckOnCondType(err *[]error, cache *pse.Cache_) {
+	// TODO - fix  dont use cache in type stmt methos
+	x, err_ := cache.FetchAST(f.TypeCond.Name)
+	if err_ != nil {
+		*err = append(*err, err_)
+	}
+	if x == nil {
 		*err = append(*err, fmt.Errorf(`Type Condition for fragment "%s" not found`, f.Name))
 		return
 	}
@@ -433,12 +441,16 @@ func (f *InlineFragment) GetSelectionSet() []SelectionSetProvider {
 	return f.SelectionSet
 }
 
-func (f *InlineFragment) CheckOnCondType(err *[]error) {
+func (f *InlineFragment) CheckOnCondType(err *[]error, cache *pse.Cache_) {
 	if len(f.TypeCond.Name) == 0 {
 		return
 	}
-	x, ok := sdl.CacheFetch(f.TypeCond.Name)
-	if !ok {
+	//
+	x, err_ := cache.FetchAST(f.TypeCond.Name)
+	if err_ != nil {
+		*err = append(*err, err_)
+	}
+	if x == nil {
 		*err = append(*err, fmt.Errorf(`Type Condition for inline fragment not found`))
 		return
 	}
@@ -510,14 +522,16 @@ type Field struct {
 	//Type  int // Fragment, InlineFragment, Field
 	Alias sdl.Name_
 	Name  sdl.Name_ // must have atleast a name - all else can be empty
-	//	Type      *sdl.Type_          // populated during checkField
+	//
 	ParentObj sdl.GQLTypeProvider // Parent type, populated during checkField
 	ParentFld *sdl.Field_         // matching field in parent object
 	Path      string              // path to field in statement
+	//
 	sdl.Arguments_
 	sdl.Directives_
 	SelectionSet []SelectionSetProvider //a Field whose type is an object (within the parent type to which field belongs) will have associated fields. For scalars SS wll be nil
-	Resolver     func(context.Context, sdl.InputValueProvider, sdl.ObjectVals) <-chan string
+	//
+	Resolver func(context.Context, sdl.InputValueProvider, sdl.ObjectVals) <-chan string
 }
 
 func (f *Field) SelectionSetNode() {}
@@ -535,11 +549,10 @@ func (f *Field) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {
 	// TODO need to have type name associated with this field either in Field struct or passed into checkUnresolvedType
 	//      also sdl.CacheFetch need type name passed in not field name
 	//      CANNOT resolve field Type as it is not known at this point (populated during checkField which will then resolve the type)
-	// if len(SelectionSet) != 0 { // non-Scalar type
-	// 	if t,ok := sdl.CacheFetch(f.Name.Name); !ok {
-	// 		unresolved[]
-	// 	}
-	f.Directives_.CheckUnresolvedTypes(unresolved)
+	// if len(f.SelectionSet) != 0 { // non-Scalar type
+	// 	unresolved[f.Name] = nil
+	// }
+	//	f.Directives_.SolicitNonScalarTypes(unresolved)
 	for _, v := range f.SelectionSet {
 		v.checkUnresolvedTypes_(unresolved)
 	}
@@ -645,11 +658,12 @@ func (n *VariableDef) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {
 		if n.Type.AST == nil {
 			// check in cache only at this stage.
 			// When control passes back to parser we resolved the unresolved using the DB and parse stmt if found.
-			if ast, ok := sdl.CacheFetch(n.Type.Name); !ok {
-				unresolved[n.Type.Name_] = n.Type
-			} else {
-				n.Type.AST = ast
-			}
+			// TODO - fix - cannot use cache in non parser methods?
+			// if ast, ok := sdl.CacheFetch(n.Type.Name); !ok {
+			unresolved[n.Type.Name_] = n.Type
+			// } else {
+			// 	n.Type.AST = ast
+			// }
 		}
 	}
 }

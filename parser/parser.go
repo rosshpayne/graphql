@@ -11,6 +11,7 @@ import (
 	"time"
 
 	sdl "github.com/graph-sdl/ast"
+	"github.com/graph-sdl/db"
 	lex "github.com/graph-sdl/lexer"
 	pse "github.com/graph-sdl/parser"
 	"github.com/graphql/ast"
@@ -54,6 +55,9 @@ type (
 		curToken  *token.Token
 		peekToken *token.Token
 
+		tyCache   *pse.Cache_
+		stmtCache *Cache_
+
 		responseMap map[string]*sdl.InputValueProvider //struct{}
 		respOrder   []string                           // slice of field paths in order executed.
 		//response  []*ast.ResponseValue // conerts response from reolver  to internal sdl.ObjectVal
@@ -70,7 +74,6 @@ type (
 
 var (
 	//	enumRepo      ast.EnumRepo_
-	typeNotExists  map[sdl.NameValue_]bool
 	FragmentStmts  map[sdl.NameValue_]*ast.FragmentStmt
 	OperationStmts map[sdl.NameValue_]*ast.OperationStmt
 	noName         string = "__NONAME__"
@@ -81,6 +84,11 @@ func New(l *lexer.Lexer) *Parser {
 		l: l,
 	}
 
+	// GL type cache
+	p.tyCache = pse.NewCache()
+	// GL statement cache
+	p.stmtCache = NewCache()
+	// cache for resolver functions
 	p.Resolver = resolver.New()
 
 	p.parseFns = make(map[token.TokenType]parseFn)
@@ -102,8 +110,6 @@ func New(l *lexer.Lexer) *Parser {
 // astsitory of all types defined in the graph
 
 func init() {
-	//	enumRepo = make(ast.EnumRepo_)
-	typeNotExists = make(map[sdl.NameValue_]bool)
 	FragmentStmts = make(map[sdl.NameValue_]*ast.FragmentStmt)
 	OperationStmts = make(map[sdl.NameValue_]*ast.OperationStmt)
 }
@@ -177,6 +183,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		QrootAST  sdl.GQLTypeProvider
 		schema    *sdl.Schema_
 		allErrors []error
+		err       error
 	)
 	//
 	// set document
@@ -184,20 +191,21 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 	if len(p.document) == 0 {
 		p.document = defaultDoc
 	}
-	ast.SetDefaultDoc(p.document)
-	sdl.SetDefaultDoc(p.document)
+	db.SetDefaultDoc(p.document)
 	if len(doc) == 0 {
-		ast.SetDocument(p.document)
-		sdl.SetDocument(p.document)
+		db.SetDocument(p.document)
 	} else {
 		p.document = doc[0]
-		ast.SetDocument(doc[0])
-		sdl.SetDocument(doc[0])
+		db.SetDocument(doc[0])
 	}
 	//
 	// fetch schema within the document
 	//
-	if schemaAST = p.fetchAST(sdl.Name_{Name: sdl.NameValue_("schema")}); schemaAST == nil {
+	schemaAST, err = p.tyCache.FetchAST(sdl.NameValue_("schema"))
+	if err != nil {
+		p.addErr(err.Error())
+	}
+	if schemaAST == nil {
 		p.addErr("Abort. There is no schema defined")
 		return nil, p.perror
 	}
@@ -224,7 +232,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		}
 
 		if stmtAST != nil {
-			ast.Add2StmtCache(stmt.AST.StmtName(), stmt.AST)
+			p.stmtCache.AddEntry(stmt.AST.StmtName(), stmt.AST) //	ast.Add2StmtCache(stmt.AST.StmtName(), stmt.AST)
 		}
 		allErrors = append(allErrors, p.perror...)
 		p.perror = nil
@@ -242,7 +250,11 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		case "query":
 			// get query rootAST
 			if QrootAST == nil {
-				if QrootAST = p.fetchAST(schema.Query); QrootAST == nil {
+				QrootAST, err = p.tyCache.FetchAST(schema.Query.Name)
+				if err != nil {
+					p.addErr(err.Error())
+				}
+				if QrootAST == nil {
 					p.addErr(fmt.Sprintf(`query root "%s" does not exist`, schema.Query))
 					return nil, p.perror
 				}
@@ -251,7 +263,11 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		case "mutation":
 			// get mutation rootAST
 			if MrootAST == nil {
-				if MrootAST = p.fetchAST(schema.Mutation); MrootAST == nil {
+				MrootAST, err = p.tyCache.FetchAST(schema.Mutation.Name)
+				if err != nil {
+					p.addErr(err.Error())
+				}
+				if MrootAST == nil {
 					p.addErr(fmt.Sprintf(`query root "%s" does not exist`, schema.Mutation))
 					return nil, p.perror
 				}
@@ -260,7 +276,11 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		case "subscription":
 			// get subscription rootAST
 			if SrootAST == nil {
-				if SrootAST = p.fetchAST(schema.Subscription); SrootAST == nil {
+				SrootAST, err = p.tyCache.FetchAST(schema.Subscription.Name)
+				if err != nil {
+					p.addErr(err.Error())
+				}
+				if SrootAST == nil {
 					p.addErr(fmt.Sprintf(`query root "%s" does not exist`, schema.Subscription))
 					return nil, p.perror
 				}
@@ -311,19 +331,19 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		}
 		// execute fragment statements first
 		// generic checks
-		p.resolveAllTypes(stmt.AST)
+		p.resolveAllTypes(stmt.AST, p.tyCache)
 		if p.hasError() {
 			return nil, p.perror
 		}
 		// check all fields belong to their respective root type & check for duplicate fields
 		p.checkFields(nil, stmt.AST)
-		x.CheckOnCondType(&p.perror)
+		x.CheckOnCondType(&p.perror, p.tyCache)
 		//	x.CheckIsInputType(&p.perror)
 		//
 		// add to cache
 		//
 		if len(p.perror) == 0 {
-			ast.Add2StmtCache(stmt.AST.StmtName(), stmt.AST)
+			p.stmtCache.AddEntry(stmt.AST.StmtName(), stmt.AST) // ast.Add2StmtCache(stmt.AST.StmtName(), stmt.AST)
 		} else {
 			failed = true
 		}
@@ -342,7 +362,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		}
 		// execute fragment statements first
 		// generic checks
-		p.resolveAllTypes(stmt.AST)
+		p.resolveAllTypes(stmt.AST, p.tyCache)
 		if p.hasError() {
 			return nil, p.perror
 		}
@@ -355,7 +375,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		// add to cache
 		//
 		if len(p.perror) == 0 {
-			ast.Add2StmtCache(stmt.AST.StmtName(), stmt.AST)
+			p.stmtCache.AddEntry(stmt.AST.StmtName(), stmt.AST) //ast.Add2StmtCache(stmt.AST.StmtName(), stmt.AST)
 		} else {
 			failed = true
 		}
@@ -429,52 +449,74 @@ func (p *Parser) SetExecStmt(xStmt string) error {
 // resolveAllTypes in the couple of cases where types are explicitly defined in operation statements (query,mutation,subscription)
 // It is also in the selectionset that objects are sourced and resolved.
 // Once resolved we have the AST of all types referenced to in the operational & fragment (non-type) statements saved in the ql-cache
-// A later validation will resolve all scalar types.//TODO - what is this?
-func (p *Parser) resolveAllTypes(stmt ast.StatementDef) {
+//
+func (p *Parser) resolveAllTypes(stmt ast.StatementDef, t *pse.Cache_) {
 	//returns slice of unresolved types from the statement passed in
 	unresolved := make(sdl.UnresolvedMap)
-	stmt.CheckUnresolvedTypes(unresolved)
+	stmt.SolicitNonScalarTypes(unresolved)
 
+	resolved := make(ast.UnresolvedMap)
+	for tyName := range unresolved {
+		if _, ok := t.Cache[tyName.String()]; ok {
+			resolved[tyName] = nil
+			//delete(unresolved, tyName)
+		}
+	}
 	//  unresolved should only contain non-scalar types known upto that point.
 	for tyName, ty := range unresolved { // unresolvedMap: [name]*Type
-		ast_ := p.fetchAST(tyName)
+		// resolve type
+		ast_, err := p.tyCache.FetchAST(tyName.Name)
 		// type ENUM values will have nil *Type
 		if ast_ != nil {
 			if ty != nil {
+				// purpose of resolving type is to assign the AST to the field's type. We can now bypass the cache for all field types.
 				ty.AST = ast_
 				// if not scalar then check for unresolved types in nested type
 				if !ty.IsScalar() {
-					p.resolveNestedType(ast_)
+					if _, ok := resolved[tyName]; !ok {
+						// recursively resolve the type only not already resolved
+						p.resolveNestedType(ast_, t)
+					}
+
 				}
 			}
 
 		} else {
 			// nil ast_ means not found in db
-			if ty != nil {
-				p.addErr(fmt.Sprintf(`Type "%s" does not exist %s`, ty.Name, ty.AtPosition()))
-			} else {
-				p.addErr(fmt.Sprintf(`Type "%s" does not exist %s`, tyName, tyName.AtPosition()))
+			if err != nil {
+				p.addErr(err.Error())
 			}
+			p.addErr(fmt.Sprintf(`Type "%s" does not exist %s`, tyName, tyName.AtPosition()))
 		}
 	}
 
 }
 
-func (p *Parser) resolveNestedType(v sdl.GQLTypeProvider) {
+func (p *Parser) resolveNestedType(v sdl.GQLTypeProvider, t *pse.Cache_) {
 	//returns slice of unresolved types from the statement passed in
 	unresolved := make(sdl.UnresolvedMap)
-	v.CheckUnresolvedTypes(unresolved)
+
+	v.SolicitNonScalarTypes(unresolved)
+
+	for tyName := range unresolved {
+		if _, ok := t.Cache[tyName.String()]; ok {
+			delete(unresolved, tyName)
+		}
+	}
 
 	//  unresolved should only contain non-scalar types known upto that point.
 	for tyName, ty := range unresolved { // unresolvedMap: [name]*Type
-		ast_ := p.fetchAST(tyName)
-		// type ENUM values will have nil *Type
+		ast_, err := p.tyCache.FetchAST(tyName.Name)
+		if err != nil {
+			p.addErr(err.Error())
+		}
+		// resolve type type ENUM values will have nil *Type
 		if ast_ != nil {
 			if ty != nil {
 				ty.AST = ast_
 				// if not scalar then check for unresolved types in nested type
 				if !ty.IsScalar() {
-					p.resolveNestedType(ast_)
+					p.resolveNestedType(ast_, t)
 				}
 			}
 
@@ -488,73 +530,6 @@ func (p *Parser) resolveNestedType(v sdl.GQLTypeProvider) {
 			p.abort = true
 		}
 	}
-}
-
-// ====================  fetchAST  =============================
-// fetchAST should only be used after all statements have been passed
-//  As each statement is parsed its types are added to the cache
-//  During validation phase each type is checked for existence using this func.
-//  if not in cache then looks at DB for types that have been predefined.
-var mu sync.RWMutex
-
-func (p *Parser) fetchAST(name sdl.Name_) sdl.GQLTypeProvider {
-
-	var (
-		ast_ sdl.GQLTypeProvider
-		ok   bool
-	)
-	name_ := name.Name
-	mu.RLock()
-	//defer mu.Unlock()
-	if ast_, ok = sdl.CacheFetch(name_); !ok {
-
-		if !typeNotExists[name_] {
-			mu.RUnlock()
-			mu.Lock()
-			if typeDef, err := sdl.DBFetch(name_); err != nil {
-				p.addErr(err.Error())
-				p.abort = true
-				mu.Unlock()
-				return nil
-			} else {
-				if len(typeDef) == 0 { // no type found in DB
-					// mark type as being nonexistent
-					typeNotExists[name_] = true
-					mu.Unlock()
-					return nil
-
-				} else {
-					//
-					// generate AST for the resolved type
-					//
-					l := lex.New(typeDef)
-					p2 := pse.New(l)
-					ast_ = p2.ParseStatement()
-					if len(p2.Getperror()) > 0 {
-						// error in parsing stmt from db - this should not happen as only valid stmts are saved.
-						p.perror = append(p.perror, p2.Getperror()...)
-					}
-					//
-					// add to sdl cache
-					//
-					sdl.Add2Cache(name_, ast_)
-					//
-					// recursively resolve types in this ast
-					//
-					err := p2.ResolveAllTypes(ast_)
-
-					p.perror = append(p.perror, err...)
-					mu.Unlock()
-					return ast_
-				}
-			}
-		} else {
-			mu.Unlock()
-			return nil
-		}
-	}
-	mu.RUnlock()
-	return ast_
 }
 
 // ================== checkFields ======================================
@@ -578,11 +553,10 @@ func (p *Parser) checkFields(root sdl.GQLTypeProvider, stmt_ ast.StatementDef) {
 
 	case *ast.FragmentStmt:
 		fmt.Println("Fragmentnstmt")
-		var ok bool
-		if root, ok = sdl.CacheFetch(stmt.TypeCond.Name); !ok {
-			p.addErr(fmt.Sprintf("Not in cache, %s ", stmt.TypeCond.Name))
-			p.abort = true
-			return
+		var err error
+		root, err = p.tyCache.FetchAST(stmt.TypeCond.Name)
+		if err != nil {
+			p.addErr(err.Error())
 		}
 		p.checkFields_(root, stmt.SelectionSet, string(root.TypeName()))
 	}
@@ -655,6 +629,20 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					}
 				}
 				//
+				// check the Field "Type.AST" is populated. Better to access the AST through the Type metadata rather than the type-cache which is a shared resource.
+				// Parsing should populate all the type metadata, but it may be miss the AST depending on order of the type processing.
+				//
+				if !rootFld.Type.IsScalar() && rootFld.Type.AST == nil {
+					var err error
+					rootFld.Type.AST, err = p.tyCache.FetchAST(rootFld.Type.Name)
+					if err != nil {
+						p.addErr(err.Error())
+					}
+					if rootFld.Type.AST == nil {
+						panic(fmt.Sprintf("Type %s not found", rootFld.Type.Name))
+					}
+				}
+				//
 				// determine if matching root type is an object based type
 				//
 				switch x := rootFld.Type.AST.(type) {
@@ -681,10 +669,7 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					// recursively call checkFields with new root (object based type) to validate the type
 					// if newRoot object appers in cache then its been validated and not necessary to checkFields.
 					//
-					if _, ok := sdl.CacheFetch(sdl.NameValue_(newRoot.TypeName())); !ok {
-						// cache it
-						p.fetchAST(sdl.Name_{Name: sdl.NameValue_(newRoot.TypeName())})
-					}
+					p.tyCache.FetchAST(sdl.NameValue_(newRoot.TypeName()))
 					//
 					// recursively check qry.SelectionSet fields match the root type fields. //TODO - I believe this check is redundant as qry.SelectonSet is the Fragment SS
 					//
@@ -724,7 +709,8 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 			// fragment spread would have its associated fragment statement checked in phase 2a so can ignore further field checks.
 
 			fmt.Println("checkFields_ : for Fragment Spread - qry.Name ", qry.Name)
-			if stmtAST, ok := ast.CacheFetchStmt(ast.StmtName_(qry.Name.String())); !ok {
+			stmtAST := p.stmtCache.FetchAST(ast.StmtName_(qry.Name.String()))
+			if stmtAST == nil {
 				p.addErr(fmt.Sprintf(`Associated Fragment definition "%s" not found in document %s`, qry.Name, qry.Name_.AtPosition()))
 				p.abort = true
 				return
@@ -756,7 +742,7 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 				qry.TypeCondAST = root
 			}
 			// check cond type is appropriate i.e object, interface, union
-			qry.CheckOnCondType(&p.perror)
+			qry.CheckOnCondType(&p.perror, p.tyCache)
 
 			rootFrag = qry.TypeCondAST
 			if !qry.TypeCond.Exists() {
@@ -1023,6 +1009,8 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 			//
 			rootFld = qry.ParentFld
 
+			fmt.Println("qry ")
+
 			if qry.Alias.Exists() {
 				fieldName = qry.Alias.String()
 			} else {
@@ -1031,6 +1019,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 			//
 			// associated GraphQL type (type system)
 			//
+			//if rootFld.Type.Name
 			switch rootFld.Type.AST.(type) {
 
 			//  -- AAA ----
@@ -1449,7 +1438,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 				// scalar or List of scalar
 				//
 				fieldPath = pathRoot + "/" + qry.Name.String()
-				fmt.Printf("xx root is a non-object response: %T   fieldPath . %s\n", responseItems, fieldPath)
+				fmt.Printf("xx root is a non-object response: %T   fieldPath . %s rootFld %T %s \n", responseItems, fieldPath, rootFld.Type.AST, rootFld.Type.Name)
 				qry.Resolver = p.Resolver.GetFunc(fieldPath)
 
 				if qry.Resolver == nil {
@@ -1548,10 +1537,11 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 									// optimise by performing loop here rather than use outer for loop
 									for i := 0; i < len(y); i++ {
 										// for scalar only Type.Name contains the scalar type name i.e. Int, Float, Boolean etc. For ENUM and Scalar types, Name does not identify type, use BaseType, passing in the type AST.
+										fmt.Println("y[i].IsType().String(), rootFld.Type.Name.String() -=-", y[i].IsType().String(), rootFld.Type.Name.String())
 										if y[i].IsType().String() != rootFld.Type.Name.String() {
 											if !(y[i].IsType().String() == "Enum" && sdl.BaseType(rootFld.Type.AST) == "E") {
 												if _, ok := y[i].InputValueProvider.(sdl.Null_); !ok {
-													p.addErr(fmt.Sprintf(`Expected "%s" got %s for "%s" %s`, rootFld.Type.Name_.String(), y[i].IsType(), qry.Name, qry.Name.AtPosition()))
+													p.addErr(fmt.Sprintf(`XX Expected "%s" got %s for "%s" %s`, rootFld.Type.Name_.String(), y[i].IsType(), qry.Name, qry.Name.AtPosition()))
 												} else {
 													var bit byte = 1
 													bit &= rootFld.Type.Constraint >> uint(d)
@@ -1648,7 +1638,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 						}
 					}
 					if resp == nil {
-						p.addErr(fmt.Sprintf("No corresponding root field found from response "))
+						p.addErr(fmt.Sprintf("yy No corresponding root field found from response "))
 						p.abort = true
 						return
 					}
@@ -1792,11 +1782,14 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 				break // continue to next query field
 			}
 			//
-			//  validate responce against type def
+			//  validate response against field type
 			//
-			respType := p.fetchAST(sdl.Name_{Name: sdl.NameValue_(responseType)})
+			respType, err := p.tyCache.FetchAST(sdl.NameValue_(responseType))
+			if err != nil {
+				p.addErr(err.Error())
+			}
 			if respType == nil {
-				p.addErr(fmt.Sprintf(`Response type "%s" not defined in Graphql respository"`, responseType))
+				p.addErr(fmt.Sprintf(`Response type "%s" not defined in Graphql repository"`, responseType))
 				return
 			}
 			respObj, ok := respType.(*sdl.Object_)
@@ -1806,13 +1799,18 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 				return
 			}
 			//
-			// confirm response type matches fragment type (expected type )
+			// confirm response type matches fragment type (expected type - expType )
 			//
-			expType := p.fetchAST(qry.FragStmt.TypeCond)
+			expType, err := p.tyCache.FetchAST(qry.FragStmt.TypeCond.Name)
+			if err != nil {
+				p.addErr(err.Error())
+			}
 			if expType == nil {
 				p.addErr(fmt.Sprintf(`Fragment typecondition "%s" not found in cache`, qry.FragStmt.TypeCond.Name))
 			} else {
+				//
 				//Fragments cannot be specified on any input value (scalar, enumeration, or input object).
+				//
 				switch x := expType.(type) {
 
 				case *sdl.Object_:
@@ -1866,8 +1864,6 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 						p.abort = true
 						return
 					}
-					// dir = qry.FragStmt.Directives
-					// sset = qry.FragStmt.SelectionSet
 					for _, d := range qry.FragStmt.Directives {
 						//... @include(if: $expandedInfo) {
 						if d.Name_.String() == "@include" {
@@ -1890,13 +1886,14 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					}
 
 				case *sdl.Union_:
+					//TODO implement
 				}
 			}
 
 		case *ast.InlineFragment:
 
 			// InlineFragment
-			// ...TypeCondition-opt	Directives-opt	SelectionSet
+			// ...TypeCondition-opt	Directives-opt	SelectionSet-list
 			//
 			var rootFrag sdl.GQLTypeProvider
 
@@ -1913,8 +1910,11 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 			}
 			//
 			// check response data {reponseType:responseItems} against the field type (determined by type condition for inline frags - see prevous stmt)
+			respType, err := p.tyCache.FetchAST(sdl.NameValue_(responseType))
 			//
-			respType := p.fetchAST(sdl.Name_{Name: sdl.NameValue_(responseType)})
+			if err != nil {
+				p.addErr(err.Error())
+			}
 			if respType == nil {
 				p.addErr(fmt.Sprintf(`Response type "%s" not defined in Graphql respository"`, responseType))
 				return
@@ -1925,6 +1925,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 				p.abort = true
 				return
 			}
+			// depending on the inline frag type (its root), verify response object satisfies it. Note it is not an error if response does not match query field type, we merely ignore the field.
 			switch rtg := rootFrag.(type) {
 			case *sdl.Interface_:
 				var found bool
@@ -1935,7 +1936,7 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					}
 				}
 				if !found {
-					// does not implement interface - proceed to next field
+					// does not implement interface - ignore this field and proceed to next
 					continue
 				}
 			default:
@@ -2660,7 +2661,7 @@ func (p *Parser) parseType(f sdl.AssignTyper) *Parser {
 		// name_ := sdl.Name_{Name: sdl.NameValue_(name), Loc: nameLoc}
 		// //System ScalarTypes are defined by the Type_.Name_, Non-system Scalar and non-scalar are defined by the AST.
 		// if !p.curToken.IsScalarType {
-		// 	ast_ = p.fetchAST(name_)
+		// 	ast_ = p.stmtCache.FetchAST(name_)
 		// }
 		p.nextToken() // read over IDENT
 		for bangs := 0; p.curToken.Type == token.RBRACKET || p.curToken.Type == token.BANG; {
