@@ -615,28 +615,33 @@ fragment comparisonCharacter on Character {
 	}
 }
 
-func TestInlineFragmentTypeCondUnion(t *testing.T) {
+func TestFragmentTypeCond2(t *testing.T) {
 
 	var input = `query ($expandedInfo: Boolean = true) {
-	leftComparison: hero(episode: DRTYPE) {  # defines a union of human | droid TODO - create setup4union
-	   ...on Human { 
-					name
-					 friends {
-  							friendsName: name
-					}
-					appearsIn
-					totalCredits
-					}
-	   ...on Droid {
-					name
-					 friends {
-  							friendsName: name
-					}
-					appearsIn
-					primaryFunction	
-			}
+	leftComparison: hero(episode: JEDI) {
+	   ...comparisonHuman
+	   ...comparisonDroid
 	}
 	}
+
+
+fragment comparisonHuman on Human {							
+  ...comparisonCharacter
+   totalCredits
+}
+
+fragment comparisonDroid on Droid {						
+  ...comparisonCharacter
+  primaryFunction
+}
+
+fragment comparisonCharacter on Character {
+  name
+  friends {
+  	friendsName: name
+  }
+  appearsIn
+}
 `
 
 	var expectedErr [1]string
@@ -645,7 +650,7 @@ func TestInlineFragmentTypeCondUnion(t *testing.T) {
 	l := lexer.New(input)
 	p := New(l)
 
-	if err := p.Resolver.Register("Query/hero", client.ResolverHero2); err != nil {
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
 	}
 	//	p.ClearCache()
@@ -930,7 +935,7 @@ fragment comparisonFields on Character {
 `
 
 	var expectedErr [1]string
-	expectedErr[0] = `Associated Fragment definition "comparisonFields2" not found in document at line: 6 column: 8`
+	expectedErr[0] = `Associated Fragment definition "comparisonFields2" not found in document at line: 6 column: 9`
 
 	l := lexer.New(input)
 	p := New(l)
@@ -1029,5 +1034,75 @@ fragment comparisonFields on Character {
 		if !found {
 			t.Errorf(`Unexpected Error = [%q]`, got.Error())
 		}
+	}
+}
+
+func TestInlineFragmentUnion(t *testing.T) {
+
+	var input = `query {
+  hero (episode: EMPIREe) {
+   firstSearchResult {
+    ... on Person {
+    age
+      name
+      
+    }
+    ... on Photo {
+          height
+      width
+	}
+   }	
+  }
+}
+`
+
+	var expectedErr [1]string
+	expectedErr[0] = ``
+
+	l := lexer.New(input)
+	p := New(l)
+
+	if err := p.Resolver.Register("Query/hero", client.ResolverHeroUnion); err != nil {
+		p.addErr(err.Error())
+	}
+	//	p.ClearCache()
+	p.SetDocument("DefaultDoc")
+	d, errs := p.ParseDocument()
+	if d != nil {
+		fmt.Println(d.String())
+	}
+	for _, ex := range expectedErr {
+		if len(ex) == 0 {
+			break
+		}
+		found := false
+		for _, err := range errs {
+			if trimWS(err.Error()) == trimWS(ex) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Expected Error = [%q]`, ex)
+		}
+	}
+	for _, got := range errs {
+		found := false
+		for _, exp := range expectedErr {
+			if trimWS(got.Error()) == trimWS(exp) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Unexpected Error = [%q]`, got.Error())
+		}
+	}
+	if d != nil {
+		if compare(d.String(), input) {
+			t.Errorf("Got:      [%s] \n", trimWS(d.String()))
+			t.Errorf("Expected: [%s] \n", trimWS(input))
+			t.Errorf(`Unexpected: program.String() wrong. `)
+		}
+	} else {
+		t.Errorf("Error in creating statement")
 	}
 }
