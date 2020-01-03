@@ -1037,19 +1037,18 @@ fragment comparisonFields on Character {
 	}
 }
 
-func TestInlineFragmentUnion(t *testing.T) {
+func TestUnionType(t *testing.T) {
 
 	var input = `query {
-  hero (episode: EMPIREe) {
+  hero (episode: JEDII) {
    firstSearchResult {
-    ... on Person {
+    ... on Person {    
+    name
     age
-      name
-      
     }
     ... on Photo {
+          width
           height
-      width
 	}
    }	
   }

@@ -183,6 +183,10 @@ func (o *OperationStmt) CheckInputValueType(err *[]error) {
 	for _, v := range o.Variable {
 		v.checkInputValueType(err)
 	}
+	o.Directives_.CheckInputValueType(err)
+	// for _, v := range SelectionSet {// performed in checkfields
+	// 	v.CheckInputValueType(o, err)
+	// }
 }
 
 func (o *OperationStmt) CheckIsInputType(err *[]error) {
@@ -266,7 +270,12 @@ type FragmentStmt struct {
 func (f *FragmentStmt) StatementNode() {} // validates type is appropriate during load into ast struct
 func (f *FragmentStmt) FragmentNode()  {} // validates type is appropriate during load into ast struct
 //func (f *FragmentStmt) ExecutableDefinition() {}
-func (f *FragmentStmt) CheckInputValueType(err *[]error) {}
+// func (f *FragmentStmt) CheckInputValueType(err *[]error) {
+// 	f.Directives_.CheckInputValueType(err)
+// 	for _, v := range f.SelectionSet {
+// 		v.CheckInputValueType()
+// 	}
+// }
 
 func (f *FragmentStmt) GetSelectionSet() []SelectionSetProvider {
 	return f.SelectionSet
@@ -380,6 +389,8 @@ func (f *FragmentSpread) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {} 
 
 //func (f *FragementSpread) ExecutableDefinition() {}
 
+func (f *FragmentSpread) CheckInputValueType(err *[]error) {}
+
 func (f *FragmentSpread) AssignName(input string, loc *sdl.Loc_, err *[]error) {
 	sdl.ValidateName(input, err, loc)
 	f.Name_ = sdl.Name_{Name: sdl.NameValue_(input), Loc: loc}
@@ -461,6 +472,7 @@ func (f *InlineFragment) CheckOnCondType(err *[]error, cache *pse.Cache_) {
 		*err = append(*err, fmt.Errorf(`Type Condition "%s" for inline fragment must be an Object, Union or Interface`, f.TypeCond))
 	}
 }
+func (f *InlineFragment) CheckInputValueType(err *[]error) {}
 
 func (f *InlineFragment) String() string { // Query will now satisfy Node interface and complete StatementDef
 	var s strings.Builder
@@ -544,6 +556,69 @@ func (f *Field) AppendSelectionSet(ss SelectionSetProvider) {
 	f.SelectionSet = append(f.SelectionSet, ss)
 }
 
+// type Type_ struct {
+// 	Constraint byte            // each bit from right represents not-null constraint applied e.g. in nested list type [type]! is 00000010, [type!]! is 00000011, type! 00000001
+// 	AST        GQLTypeProvider // AST instance of type. WHen would this be used??. Used for non-Scalar types. AST in cache(typeName), then in Type_(typeName). If not in Type_, check cache, then DB.
+// 	Depth      int             // depth of nested List e.g. depth 2 is [[type]]. Depth 0 implies non-list type, depth > 0 is a list type
+// 	Name_                      // type name. inherit AssignName(). Use Name_ to access AST via cache lookup. ALternatively, use AST above or TypeFlag_ instead of string.
+// 	Base       string          // base type e.g. Name_ = "Episode" has Base = E(num)
+// }
+// type Field_ struct {
+// Desc string
+// Name_
+// ArgumentDefs InputValueDefs  // InputValueDefs []InputValueDef
+// Type *Type_
+// Directives_
+
+// type InputValueDef struct {
+// 	Desc string
+// 	Name_
+// 	Type       *Type_
+// 	DefaultVal *InputValue_
+// 	Directives_
+// }
+// type Arguments_ struct {
+// 	Arguments []*ArgumentT
+// }
+// type ArgumentT struct {
+// 	//( name : value )
+// 	Name_
+// 	Value *InputValue_
+// }
+// func (a *Arguments_) AppendArgument(ss *ArgumentT) {
+// 	a.Arguments = append(a.Arguments, ss)
+// }
+func (f *Field) ExpandArguments(root *sdl.Field_, err *[]error) (failed bool) {
+	fmt.Println(" = = = = = = = = = = = = = = = = = = = = = = =  ExpandArguments = = = = = = = = = = = = = = = = ")
+	for _, rfa := range root.ArgumentDefs {
+		var found bool
+		for _, fa := range f.Arguments { // sdl.Arguments_
+			if rfa.Name.Equals(fa.Name) {
+				found = true
+				break
+			}
+			// 	for _,dir := range rfa.Directives {
+			// 		if dir.Name == "Include" {
+
+			// 		}
+
+			// 	break
+			// }
+		}
+		if !found && !rfa.Type.IsNullable() {
+			if rfa.DefaultVal != nil {
+				// has a default vaue - append to field arguments
+				arg := sdl.ArgumentT{Name_: sdl.Name_{Name: sdl.NameValue_(rfa.Name)}, Value: rfa.DefaultVal}
+				f.Arguments_.AppendArgument(&arg)
+			} else {
+				failed = true
+				*err = append(*err, fmt.Errorf(`Argument "%s" is not nullable from field "%s" %s`, rfa.Name, root.Name, rfa.Name_.AtPosition()))
+			}
+		}
+	}
+	return failed
+}
+
 func (f *Field) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {
 	// get type of the field
 	// TODO need to have type name associated with this field either in Field struct or passed into checkUnresolvedType
@@ -565,16 +640,19 @@ func (f *Field) GenNameAliasPath() string {
 	return f.Name.String()
 }
 
-// func (f *Field) checkInputValueType(reftype *sdl.Type, argName sdlName_, err *[]error) {
-
-// 	for _, v := range f.Arguments_ {
-// 		v.CheckInputValueType__(reftype, argName, err)
-// 	}
+// func (f *Field) CheckInputValueType(reftype *sdl.Type, argName sdlName_, err *[]error) {
+// 	//arguments performed in parser's checkFields_()
+// 	f.Diectivies_.CheckInputValueType(err)
 // }
 
-// func (f *Field) AppendArgument(ss *ArgumentT) {
-// 	f.Arguments = append(f.Arguments, ss)
+// func (f *Field) CheckInputValueType( err *[]error) {
+// 	//arguments performed in parser's checkFields_()
+// 	f.Diectivies_.CheckInputValueType(err)
 // }
+
+func (f *Field) AppendArgument(ss *sdl.ArgumentT) {
+	f.Arguments = append(f.Arguments, ss)
+}
 
 func (f *Field) AssignName(input string, loc *sdl.Loc_, err *[]error) {
 	sdl.ValidateName(input, err, loc)

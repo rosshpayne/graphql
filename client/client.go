@@ -741,3 +741,53 @@ var ResolverHeroUnion = func(ctx context.Context, resp sdl.InputValueProvider, a
 
 	return gql
 }
+
+var ResolverHeroArg = func(ctx context.Context, resp sdl.InputValueProvider, args sdl.ObjectVals) <-chan string {
+	var (
+		episode string
+		index   int
+		s       strings.Builder
+	)
+
+	f := func() string {
+		for _, v := range args {
+
+			if v.Name_.EqualString("episode") {
+				if x, ok := v.Value.InputValueProvider.(*sdl.EnumValue_); ok {
+					episode = x.String()
+				}
+			}
+		}
+		for i, v := range episodes {
+			if strings.ToUpper(episode) == string(v) {
+				index = i
+			}
+		}
+		//	s.WriteString("[" + fmt.Sprintf("%d", index) + " " + episode)
+
+		//s.WriteString("{Droid:  [")
+		if episode == "EMPIRE" {
+			s.WriteString(fmt.Sprintf(`{SomeType3: {somefield : "ABCsde" }}`))
+
+		} else {
+			//s.WriteString(fmt.Sprintf(`{"SomeType3": [{somefield : "ABCsde" }, {somefield : "DEFOJ" } ]}`))
+			s.WriteString(fmt.Sprintf(`{SomeType3: {somefield : "ABCsde" }}`))
+		}
+		// simulate very slow db access
+		time.Sleep(650 * time.Millisecond)
+		return s.String()
+	}
+
+	gql := make(chan string)
+	go func() {
+		// blocing wait. Unblocked when server starts listening on gql channel or Done channel closed by timeout
+		select {
+		case <-ctx.Done():
+			return
+		case gql <- f():
+			return
+		}
+	}()
+
+	return gql
+}
