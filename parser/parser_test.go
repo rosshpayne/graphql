@@ -26,7 +26,7 @@ func trimWS(input string) string {
 
 }
 
-func TestQueryGood(t *testing.T) {
+func TestXQGood(t *testing.T) {
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
     Xid
@@ -65,7 +65,7 @@ func TestQueryGood(t *testing.T) {
 
 }
 
-func TestMissingRPAREN(t *testing.T) {
+func TestXQMissingRPAREN(t *testing.T) {
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
     Xid
@@ -98,7 +98,7 @@ func TestMissingRPAREN(t *testing.T) {
 	}
 }
 
-func TestMisplacedVariable(t *testing.T) {
+func TestXQMisplacedVariable(t *testing.T) {
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
     Xid
@@ -133,7 +133,7 @@ func TestMisplacedVariable(t *testing.T) {
 	}
 }
 
-func TestArgumentNull(t *testing.T) {
+func TestXQArgumentNull(t *testing.T) {
 	var input = `query getZuckProfile($devicePicSize: [Int!] = [1234 23 234 32 null] ) {
   xyzalias: user(id: 4) {
     sex
@@ -178,7 +178,7 @@ func TestArgumentNull(t *testing.T) {
 	}
 }
 
-func TestQueryNoName1(t *testing.T) {
+func TestXQNoName1(t *testing.T) {
 	var input = `query  {
   xyzalias: user(id: 4) {
     Person {
@@ -227,7 +227,7 @@ func TestQueryNoName1(t *testing.T) {
 	}
 }
 
-func TestQueryNoName2(t *testing.T) {
+func TestXQNoName2(t *testing.T) {
 	var input = `query ($devicePicSize: [Int!] = [1234 23 234 32] ) {
   xyzalias: user(id: 4) {
     Person {
@@ -276,7 +276,7 @@ func TestQueryNoName2(t *testing.T) {
 	}
 }
 
-func TestQueryNoName3(t *testing.T) {
+func TestXQNoName3(t *testing.T) {
 	var input = `query ($devicePicSize: Int! = null ) {
   xyzalias: user(id: 4) {
     Person {
@@ -325,7 +325,7 @@ func TestQueryNoName3(t *testing.T) {
 	}
 }
 
-func TestIllegal1(t *testing.T) {
+func TestXQIllegal1(t *testing.T) {
 	var input = `query getZuckProfile(#devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
     Xid
@@ -345,7 +345,7 @@ func TestIllegal1(t *testing.T) {
 	}
 }
 
-func TestIllegal2(t *testing.T) {
+func TestXQIllegal2(t *testing.T) {
 	var input = `query getZuckProfile(!devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
     Xid
@@ -366,7 +366,7 @@ func TestIllegal2(t *testing.T) {
 	}
 }
 
-func TestIllegal3(t *testing.T) {
+func TestXQIllegal3(t *testing.T) {
 	var input = `query getZuckProfile(?devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
     Xid
@@ -386,7 +386,7 @@ func TestIllegal3(t *testing.T) {
 	}
 }
 
-func TestIllegal4(t *testing.T) {
+func TestXQIllegal4(t *testing.T) {
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: us*er(id: 4) {
     Xid
@@ -406,7 +406,7 @@ func TestIllegal4(t *testing.T) {
 		}
 	}
 }
-func TestMissingArgName(t *testing.T) {
+func TestXQMissingArgName(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
@@ -440,7 +440,7 @@ func TestMissingArgName(t *testing.T) {
 	}
 }
 
-func TestMissingColon(t *testing.T) {
+func TestXQMissingColon(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
@@ -475,7 +475,7 @@ func TestMissingColon(t *testing.T) {
 	}
 }
 
-func TestLeadingDoubleUnderscore(t *testing.T) {
+func TestXQLeadingDoubleUnderscore(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: __use_r(id: 4) {
@@ -495,7 +495,7 @@ func TestLeadingDoubleUnderscore(t *testing.T) {
 	}
 }
 
-func TestLeadingSingleUnderscore(t *testing.T) {
+func TestXQLeadingSingleUnderscore(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: _use_r(id: 4) {
@@ -522,7 +522,7 @@ func TestLeadingSingleUnderscore(t *testing.T) {
 
 }
 
-func TestStmtVariableNoDefault(t *testing.T) {
+func TestXQStmtVariableNoDefault(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int) {
   xyzalias: _use_r(id: false) {
@@ -553,7 +553,7 @@ func TestStmtVariableNoDefault(t *testing.T) {
 
 }
 
-func TestBoolArgValue(t *testing.T) {
+func TestXQBoolArgValue(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: _use_r(id: false) {
@@ -583,7 +583,7 @@ func TestBoolArgValue(t *testing.T) {
 
 }
 
-func TestMultiArgValue(t *testing.T) {
+func TestXQMultiArgValue(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: _use_r(id: false name: """Ross""" ) {
@@ -612,7 +612,7 @@ query getZuckProfile( $devicePicSize:Int = 1234) {
 	}
 
 }
-func TestBooleanVarType(t *testing.T) {
+func TestXQBooleanVarType(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Boolean = false) {
   xyzalias: _use_r(id: $devicePicSize) {
@@ -640,7 +640,7 @@ func TestBooleanVarType(t *testing.T) {
 
 }
 
-func TestVariableReference(t *testing.T) {
+func TestXQVariableReference(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: _use_r(id: $devicePicSize) {
@@ -668,7 +668,7 @@ func TestVariableReference(t *testing.T) {
 
 }
 
-func TestWrongVariableNameInArgument(t *testing.T) {
+func TestXQWrongVariableNameInArgument(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: _use_r(id: $ePicSize) {
@@ -687,7 +687,7 @@ func TestWrongVariableNameInArgument(t *testing.T) {
 	}
 }
 
-func TestNullValue(t *testing.T) {
+func TestXQNullValue(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: _use_r(id: null) {
@@ -719,7 +719,7 @@ func TestNullValue(t *testing.T) {
 
 }
 
-func TestList0(t *testing.T) {
+func TestXQList0(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: _use_r(id: [1 2 34 56.78]) {
@@ -751,7 +751,7 @@ func TestList0(t *testing.T) {
 
 }
 
-func TestList1(t *testing.T) {
+func TestXQList1(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
    xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 ] "abc" "def"]) {
@@ -783,7 +783,7 @@ func TestList1(t *testing.T) {
 
 }
 
-func TestList2(t *testing.T) {
+func TestXQList2(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: _use_r(id: [1 2 34 56.78 [6 "xyz" [ "yut" 33 false ] null 78.076 true $devicePicSize] false "abc" ]) {
@@ -815,7 +815,7 @@ func TestList2(t *testing.T) {
 
 }
 
-func TestUseOfCommas(t *testing.T) {
+func TestXQUseOfCommas(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: _use_r(id: [1 2,, 34, ,56.78 , [6 "xyz" , [ "yut" 33 false ]  null 78.076 true ,$devicePicSize] false,,, "abc" ]) {
@@ -847,7 +847,7 @@ func TestUseOfCommas(t *testing.T) {
 
 }
 
-func TestUseOfCommas2(t *testing.T) {
+func TestXQUseOfCommas2(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: _use_r(id: [1 2,, 34, ,56.78 , [6 "xyz" , [ "yut" 33 false ] null 78.076 true ,$devicePicSize] false,,, "abc" ]) {
@@ -879,7 +879,7 @@ func TestUseOfCommas2(t *testing.T) {
 
 }
 
-func TestObject1(t *testing.T) {
+func TestXQObject1(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
    xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 ] "abc" "def"] obj: { id:1 cat :234 food : [ 1 2 3] }) {
@@ -911,7 +911,7 @@ func TestObject1(t *testing.T) {
 
 }
 
-func TestObjecWithVariable(t *testing.T) {
+func TestXQObjecWithVariable(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
    xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 $devicePicSize] "abc" "def"] obj: { id:1 cat :$devicePicSize food : [ 1 2 3] } node: "flight" ) {
@@ -943,7 +943,7 @@ func TestObjecWithVariable(t *testing.T) {
 
 }
 
-func TestObjecWithVariableWrongInput(t *testing.T) {
+func TestXQObjecWithVariableWrongInput(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: OddOne = 1234) {
    xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 $devicePicSize] "abc" "def"] obj: { id:1 cat :$devicePicSize food : [ 1 2 3] } node: "flight" ) {
@@ -975,7 +975,7 @@ func TestObjecWithVariableWrongInput(t *testing.T) {
 
 }
 
-func TestObjecWithVariableWrongInput2(t *testing.T) {
+func TestXQObjecWithVariableWrongInput2(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: OddOne = {x: 123 y:123}) {
    xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 $devicePicSize] "abc" "def"] obj: { id:1 cat :$devicePicSize food : [ 1 2 3] } node: "flight" ) {
@@ -1007,7 +1007,7 @@ func TestObjecWithVariableWrongInput2(t *testing.T) {
 
 }
 
-func TestObjecWithVariableWrongInput3(t *testing.T) {
+func TestXQObjecWithVariableWrongInput3(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: OddOne = {x: 123 yy:123.2}) {
    xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 $devicePicSize] "abc" "def"] obj: { id:1 cat :$devicePicSize food : [ 1 2 3] } node: "flight" ) {
@@ -1039,7 +1039,7 @@ func TestObjecWithVariableWrongInput3(t *testing.T) {
 
 }
 
-func TestObjecWithVariableWrongInputType(t *testing.T) {
+func TestXQObjecWithVariableWrongInputType(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Person = {x: 123 yy:123.2}) {
    xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 $devicePicSize] "abc" "def"] obj: { id:1 cat :$devicePicSize food : [ 1 2 3] } node: "flight" ) {
@@ -1084,7 +1084,7 @@ func TestObjecWithVariableWrongInputType(t *testing.T) {
 
 }
 
-func TestObjecWithVariableCorrectInput(t *testing.T) {
+func TestXQObjecWithVariableCorrectInput(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: OddOne = {x: 123 y:123.2}) {
    xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 $devicePicSize] "abc" "def"] obj: { id:1 cat :$devicePicSize food : [ 1 2 3] } node: "flight" ) {
@@ -1116,7 +1116,7 @@ func TestObjecWithVariableCorrectInput(t *testing.T) {
 
 }
 
-func TestLotsOfFItems(t *testing.T) {
+func TestXQLotsOfFItems(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
    xyzalias: _use_r(id: [1 2 34 ] a : 1 b : 2 c : 3 d:4 e:5 abc:33 par:"abc" kit:123.12 aa:"a" d:123 p:12 c:"3" f:98 z:12 dd:23 d0:98 e:5 abc:33 par:"abc" kit:123.12 aa:"a" d:123 p:12 c:"3" f:98 z:12 dd:23 d0:98)  {
@@ -1253,7 +1253,7 @@ func TestLotsOfFItems(t *testing.T) {
 
 }
 
-func TestDirective11(t *testing.T) {
+func TestXQDirective11(t *testing.T) {
 
 	var input = `query getZuckProfile($withFriends: Boolean = true) {
    xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 ] "abc" "def"] obj: { id:1 cat :234 food : [ 1 2 3] }) {
@@ -1293,7 +1293,7 @@ func TestDirective11(t *testing.T) {
 
 }
 
-func TestFragment1(t *testing.T) {
+func TestXQFragment1(t *testing.T) {
 
 	var input = `query withFragments {
   user(id: 4) {
@@ -1341,7 +1341,7 @@ name
 
 }
 
-func TestFragment2(t *testing.T) {
+func TestXQFragment2(t *testing.T) {
 
 	var input = `query withNestedFragments {
   user(id: 4) {
@@ -1394,7 +1394,7 @@ fragment standardProfilePic on User {
 
 }
 
-func TestInlineFragment2(t *testing.T) {
+func TestXQInlineFragment2(t *testing.T) {
 
 	var input = `query inlineFragmentTyping {
   profiles(handles: ["zuck", "cocacola"]) {
@@ -1436,7 +1436,7 @@ count
 
 }
 
-func TestInlineFragWithDirective(t *testing.T) {
+func TestXQInlineFragWithDirective(t *testing.T) {
 
 	var input = `query inlineFragmentNoType($expandedInfo: Boolean) {
   user(handle: "zuck") {

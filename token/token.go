@@ -24,7 +24,7 @@ const (
 	INT       = "Int"    // 1343456
 	FLOAT     = "Float"  // 3.42
 	STRING    = "String" // contents between " or """
-	RAWSTRING = "Raw"
+	RAWSTRING = "RAWSTRING"
 	LIST      = "List"
 	BOOLEAN   = "Boolean"
 	OBJECT    = "Object"

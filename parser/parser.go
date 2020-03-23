@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	_ "os"
+	"log"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,7 +22,7 @@ import (
 )
 
 const (
-	cErrLimit  = 8 // how many parse errors are permitted before processing stops
+	cErrLimit  = 8 // error limit before parsing stops
 	Executable = 'E'
 	TypeSystem = 'T'
 	defaultDoc = "DefaultDoc"
@@ -31,6 +32,8 @@ const (
 	QUERY        = `query`
 	MUTATION     = `mutation`
 	SUBSCRIPTION = `subscription`
+	//
+	logrFlags = log.LstdFlags | log.Lshortfile
 )
 
 type Argument struct {
@@ -54,6 +57,9 @@ type (
 
 		curToken  *token.Token
 		peekToken *token.Token
+
+		logr *log.Logger
+		logf *os.File
 
 		tyCache   *pse.Cache_
 		stmtCache *Cache_
@@ -154,9 +160,6 @@ func (p *Parser) nextToken(s ...string) {
 	p.curToken = p.peekToken
 
 	p.peekToken = p.l.NextToken() // get another token from lexer:    [,+,(,99,Identifier,keyword etc.
-	if len(s) > 0 {
-		fmt.Printf("** Current Token: [%s] %s %s %s %s %s %s\n", s[0], p.curToken.Type, p.curToken.Literal, p.curToken.Cat, "Next Token:  ", p.peekToken.Type, p.peekToken.Literal)
-	}
 	if p.curToken != nil && p.curToken.Illegal {
 		//if p.curToken.Illegal {
 		p.addErr(fmt.Sprintf("Illegal %s token, [%s]", p.curToken.Type, p.curToken.Literal))
@@ -168,10 +171,25 @@ func (p *Parser) nextToken(s ...string) {
 	}
 }
 
+func openLogFile() *os.File {
+	logf, err := os.OpenFile("gqlserver.sys.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return logf
+}
+
+func (p *Parser) closeLogFile() {
+	if err := p.logf.Close(); err != nil {
+		log.Fatal(err)
+	}
+}
+
 // ==================== Start =========================
 
 func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 
+	defer p.closeLogFile()
 	api := &ast.Document{}
 	//	api.Statements = []ast.Statement{} // contains operational stmts (query, mutation, subscriptions) and fragment stmts
 	//
@@ -199,6 +217,12 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		p.document = doc[0]
 		db.SetDocument(doc[0])
 	}
+	//
+	//  open log file and set logger
+	//
+	p.logf = openLogFile()
+	p.logr = log.New(p.logf, "SDL:", logrFlags)
+	p.tyCache.SetLogger(p.logr)
 	//
 	// fetch schema within the document
 	//
@@ -454,6 +478,7 @@ func (p *Parser) SetExecStmt(xStmt string) error {
 // Once resolved we have the AST of all types referenced to in the operational & fragment (non-type) statements saved in the ql-cache
 //
 func (p *Parser) resolveAllTypes(stmt ast.StatementDef, t *pse.Cache_) {
+	fmt.Println("******* resolveAllTypes in GQL not sdl.......................")
 	//returns slice of unresolved types from the statement passed in
 	unresolved := make(sdl.UnresolvedMap)
 	stmt.SolicitNonScalarTypes(unresolved)
@@ -499,7 +524,7 @@ func (p *Parser) resolveNestedType(v sdl.GQLTypeProvider, t *pse.Cache_) {
 	//returns slice of unresolved types from the statement passed in
 	unresolved := make(sdl.UnresolvedMap)
 
-	v.SolicitNonScalarTypes(unresolved)
+	v.SolicitAbstractTypes(unresolved) //SolicitNonScalarTypes(unresolved)
 
 	for tyName := range unresolved {
 		if _, ok := t.Cache[tyName.String()]; ok {
@@ -589,8 +614,7 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 		return
 	}
 	fmt.Println("********************************************************* checkFields_ *********************************************** ")
-	//	rootObj = root.(*sdl.Object_) // 	type Query { allPersons(last: Int): [Person!]	}
-	// rootObj := root.(sdl.SelectionGetter) - moved 8 lines down
+
 	for _, qryFld := range set {
 		fmt.Printf("*** *** checkFields: qryFld %T\n", qryFld)
 
@@ -607,8 +631,8 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 			//
 			// Confirm argument value type against type definition
 			//
-			for _, rootFld = range rootObj.GetSelectionSet() { // root object nested fields
-
+			for _, rootFld = range rootObj.GetSelectionSet() { // root object fields
+				//
 				// find matching root type
 				//
 				fmt.Println("+++ qry.Name.Equals(rootFld.Name_)", qry.Name, rootFld.Name_)
@@ -663,6 +687,7 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					p.respOrder = append(p.respOrder, fieldPath)
 					p.tyCache.FetchAST(sdl.NameValue_(newRoot.TypeName()))
 					p.checkFields_(newRoot, qry.SelectionSet, fieldPath)
+
 				case *sdl.Interface_:
 					fmt.Println("matching root is an interface")
 					newRoot = x
@@ -673,6 +698,7 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					p.respOrder = append(p.respOrder, fieldPath)
 					p.tyCache.FetchAST(sdl.NameValue_(newRoot.TypeName()))
 					p.checkFields_(newRoot, qry.SelectionSet, fieldPath)
+
 				case *sdl.Union_:
 					fmt.Println("matching root is a Union")
 					fmt.Printf("*** *** checkFields: qryFld %T #selectionSet %d\n", qryFld, len(qry.SelectionSet))
@@ -684,6 +710,7 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					p.respOrder = append(p.respOrder, fieldPath)
 					p.tyCache.FetchAST(sdl.NameValue_(newRoot.TypeName()))
 					p.checkFields_(newRoot, qry.SelectionSet, fieldPath)
+
 				default:
 					fmt.Println("matching root is not an object or interface ")
 				}
@@ -1138,10 +1165,10 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 									p.addErr(fmt.Sprintf(`Expected a single value for "%s" , response returned a List  %s`, rootFld.Name, qry.Name.AtPosition()))
 								}
 
-								var f func(y sdl.List_, d int)
+								var f func(y sdl.List_, d uint8)
 								// f will output sdl.List_ for any level of nesting
 								// d is the nesting depth of List_
-								f = func(y sdl.List_, d int) {
+								f = func(y sdl.List_, d uint8) {
 
 									for i := 0; i < len(y); i++ {
 										if x, ok := y[i].InputValueProvider.(sdl.List_); ok {
@@ -1438,10 +1465,10 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 							p.addErr(fmt.Sprintf(`Expected a single value for "%s" , response returned a List  %s`, rootFld.Name, qry.Name.AtPosition()))
 						}
 
-						var f func(y sdl.List_, d int)
+						var f func(y sdl.List_, d uint8)
 						// f will output sdl.List_ for any level of nesting
 						// d is the depth of the listing
-						f = func(y sdl.List_, d int) {
+						f = func(y sdl.List_, d uint8) {
 
 							for i := 0; i < len(y); i++ {
 								if x, ok := y[i].InputValueProvider.(sdl.List_); ok {
@@ -1600,12 +1627,10 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 
 					case sdl.ObjectVals:
 						//  { name:InputValue_ name:InputValue_ ... }
-						fmt.Println("** responseItems are ObjectVals")
 						for _, response := range r {
 							//
 							// find response field by matching name against root field and  grab the associated response field data.
 							//
-							fmt.Println(" response.Name.EqualString(rootFld.Name_.String()) ", response.Name, rootFld.Name_.String())
 							if response.Name.EqualString(rootFld.Name_.String()) { // name
 								resp = response.Value.InputValueProvider
 								break
@@ -1679,10 +1704,10 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 							p.addErr(fmt.Sprintf(`Expected a single value for "%s" , response returned a List  %s`, rootFld.Name, qry.Name.AtPosition()))
 						}
 
-						var f func(y sdl.List_, d int)
+						var f func(y sdl.List_, d uint8)
 						// f will output sdl.List_ for any level of nesting
 						// d is the nesting depth of List_
-						f = func(y sdl.List_, d int) {
+						f = func(y sdl.List_, d uint8) {
 
 							for i := 0; i < len(y); i++ {
 								if x, ok := y[i].InputValueProvider.(sdl.List_); ok {
@@ -1886,10 +1911,10 @@ func (p *Parser) executeStmt_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 						//
 						// does response match expected root type
 						//
-						var f func(y sdl.List_, d int)
+						var f func(y sdl.List_, d uint8)
 						// f will output sdl.List_ for any level of nesting
 						// d is the nesting depth of List_
-						f = func(y sdl.List_, d int) {
+						f = func(y sdl.List_, d uint8) {
 
 							for i := 0; i < len(y); i++ {
 								if x, ok := y[i].InputValueProvider.(sdl.List_); ok {
@@ -2440,11 +2465,9 @@ func (p *Parser) parseArguments(f sdl.ArgumentAppender, optional ...bool) *Parse
 		// 	return p.addErr(fmt.Sprintf(`Expected an argument Value followed by IDENT or RPAREN got an %s:%s:%s %s:%s:%s`, p.curToken.Cat, p.curToken.Type, p.curToken.Literal, p.peekToken.Cat, p.peekToken.Type, p.peekToken.Literal))
 		// }
 		v.Value = p.parseInputValue_()
-		p.printToken("After parseINputValue..")
 		return nil
 	}
 	// (
-	p.printToken("parseArguments ")
 	if p.curToken.Type == token.LPAREN {
 		p.nextToken() // read over (
 	}
@@ -2525,7 +2548,6 @@ func (p *Parser) parseSelectionSet(f ast.HasSelectionSetProvider, optional ...bo
 	if p.hasError() {
 		return p
 	}
-	p.printToken("parseSelectionSEt")
 	if p.curToken.Type != token.LBRACE {
 		if len(optional) == 0 {
 			p.addErr(fmt.Sprintf("Expect a selection set %s", p.l.AtPosition()))
@@ -2628,7 +2650,6 @@ func (p *Parser) parseVariables(st ast.OperationDef, optional ...bool) *Parser {
 
 	switch stmt := st.(type) {
 	case *ast.OperationStmt:
-		p.printToken("In variable..")
 		if p.curToken.Type == token.LPAREN {
 			for p.curToken.Type != token.RPAREN { //p.nextToken("Next... should be )") {
 
@@ -2862,7 +2883,7 @@ func (p *Parser) parseType(f sdl.AssignTyper) *Parser {
 		name string
 		//	ast_ ast.GQLTypeProvider
 		//typedef ast.TypeFlag_ // token defines SCALAR types only. All other types will be populated in astType map.
-		depth   int
+		depth   uint8
 		nameLoc *sdl.Loc_
 	)
 	nameLoc = p.Loc()
@@ -2871,7 +2892,7 @@ func (p *Parser) parseType(f sdl.AssignTyper) *Parser {
 	case token.LBRACKET:
 		// [ typeName ]
 		var (
-			depthClose uint
+			depthClose uint8
 		)
 		p.nextToken() // read over [
 		for depth = 1; p.curToken.Type == token.LBRACKET; p.nextToken() {
@@ -2893,7 +2914,7 @@ func (p *Parser) parseType(f sdl.AssignTyper) *Parser {
 		// 	ast_ = p.stmtCache.FetchAST(name_)
 		// }
 		p.nextToken() // read over IDENT
-		for bangs := 0; p.curToken.Type == token.RBRACKET || p.curToken.Type == token.BANG; {
+		for bangs := uint8(0); p.curToken.Type == token.RBRACKET || p.curToken.Type == token.BANG; {
 			if p.curToken.Type == token.BANG {
 				bangs++
 				if bangs > depth+1 {
@@ -2909,7 +2930,7 @@ func (p *Parser) parseType(f sdl.AssignTyper) *Parser {
 				p.nextToken() // read over ]
 			}
 		}
-		if depth != int(depthClose) {
+		if depth != uint8(depthClose) {
 			p.addErr("close ] does not match opening [ in type specification")
 			return p
 		}
@@ -2931,7 +2952,7 @@ func (p *Parser) parseType(f sdl.AssignTyper) *Parser {
 		return p
 	}
 	// name is the type name Int, Person, [name], ...
-	t := &sdl.Type_{Constraint: bit, Depth: depth} //, AST: ast_}
+	t := &sdl.GQLtype{Constraint: bit, Depth: depth} //, AST: ast_}
 	t.AssignName(name, nameLoc, &p.perror)
 	f.AssignType(t) // assign the name of the named type. Later type validation pass of AST will confirm if the named type exists.
 	return p

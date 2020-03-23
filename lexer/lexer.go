@@ -19,6 +19,9 @@ type Lexer struct {
 	Line  int
 	Col   int // curren col Loc
 	err   error
+	//
+	buffer [2]token.Token // dual buffer to hold current and peek token
+	bi     int            // buffer index
 }
 
 func (l *Lexer) CLoc() int {
@@ -292,10 +295,27 @@ func (l *Lexer) readToEol() {
 }
 
 func (l *Lexer) newToken(tokenType token.TokenType, ch rune, Loc ...token.Pos) *token.Token {
-	if len(Loc) > 0 {
-		return &token.Token{Cat: token.NONVALUE, Type: tokenType, Literal: string(ch), Loc: Loc[0]}
+
+	if l.bi == 0 {
+		l.bi = 1
+	} else {
+		l.bi = 0
 	}
-	return &token.Token{Cat: token.NONVALUE, Type: tokenType, Literal: string(ch), Loc: token.Pos{l.Line, l.Col}}
+	y := &l.buffer[l.bi]
+	// populate or clear all fields
+	y.Cat = token.NONVALUE
+	y.Type = tokenType
+	y.Literal = string(ch)
+	y.IsScalarType = false
+	y.Illegal = false
+	if len(Loc) > 0 {
+		y.Loc = Loc[0]
+	} else {
+		y.Loc = token.Pos{l.Line, l.Col}
+	}
+
+	return y
+
 }
 
 // func (l *Lexer) GetLoc() *token.Pos {

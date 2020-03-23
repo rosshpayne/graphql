@@ -9,7 +9,7 @@ import (
 	pse "github.com/graph-sdl/parser"
 )
 
-type UnresolvedMap sdl.UnresolvedMap //¬333map[Name_]*sdl.Type_
+type UnresolvedMap sdl.UnresolvedMap //¬333map[Name_]*sdl.GQLtype
 
 // ============ InputValue VALUE node - must satisfy ValueI =======================
 
@@ -28,9 +28,9 @@ func (sc *Scalar_) Exists() bool {
 
 // ======== type system =========
 
-//type NamedType_ sdl.Name_
+//type NamedGQLtype sdl.Name_
 
-// func (n *NamedType_) String() string {
+// func (n *NamedGQLtype) String() string {
 // 	return n.String()
 // }
 
@@ -210,7 +210,7 @@ func (o *OperationStmt) String() string { // Query will now satisfy Node interfa
 			s.WriteString(fmt.Sprintf("\n %s %s", o.Type, o.Name))
 		}
 	} else {
-		s.WriteString(fmt.Sprintf("%s ", o.Type))
+		s.WriteString(fmt.Sprintf(" %s %s", o.Type, o.Name))
 	}
 	if len(o.Variable) > 0 {
 		s.WriteString("(")
@@ -328,15 +328,15 @@ func (f *FragmentStmt) String() string { // Query will now satisfy Node interfac
 
 func (f *FragmentStmt) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
 
-	// type Type_ struct {
+	// type GQLtype struct {
 	// 	Constraint byte            // each on bit from right represents not-null constraint applied e.g. in nested list type [type]! is 00000010, [type!]! is 00000011, type! 00000001
-	// 	AST        GQLTypeProvider // AST instance of type. WHen would this be used??. Used for non-Scalar types. AST in cache(typeName), then in Type_(typeName). If not in Type_, check cache, then DB.
+	// 	AST        GQLTypeProvider // AST instance of type. WHen would this be used??. Used for non-Scalar types. AST in cache(typeName), then in GQLtype(typeName). If not in GQLtype, check cache, then DB.
 	// 	Depth      int             // depth of nested List e.g. depth 2 is [[type]]. Depth 0 implies non-list type, depth > 0 is a list type
 	// 	Name_                      // type name. inherit AssignName(). Use Name_ to access AST via cache lookup. ALternatively, use AST above or TypeFlag_ instead of string.
 	// }
 	// TODO: do not reference cache in methods - performn in parser
 	// if pse.CacheFetch(f.TypeCond.Name) {
-	// 	ty := sdl.Type_{Name_: f.TypeCond}
+	// 	ty := sdl.GQLtype{Name_: f.TypeCond}
 	unresolved[f.TypeCond] = nil //&ty
 	// }
 	//f.Directives_.SolicitNonScalarTypes(unresolved)
@@ -556,9 +556,9 @@ func (f *Field) AppendSelectionSet(ss SelectionSetProvider) {
 	f.SelectionSet = append(f.SelectionSet, ss)
 }
 
-// type Type_ struct {
+// type GQLtype struct {
 // 	Constraint byte            // each bit from right represents not-null constraint applied e.g. in nested list type [type]! is 00000010, [type!]! is 00000011, type! 00000001
-// 	AST        GQLTypeProvider // AST instance of type. WHen would this be used??. Used for non-Scalar types. AST in cache(typeName), then in Type_(typeName). If not in Type_, check cache, then DB.
+// 	AST        GQLTypeProvider // AST instance of type. WHen would this be used??. Used for non-Scalar types. AST in cache(typeName), then in GQLtype(typeName). If not in GQLtype, check cache, then DB.
 // 	Depth      int             // depth of nested List e.g. depth 2 is [[type]]. Depth 0 implies non-list type, depth > 0 is a list type
 // 	Name_                      // type name. inherit AssignName(). Use Name_ to access AST via cache lookup. ALternatively, use AST above or TypeFlag_ instead of string.
 // 	Base       string          // base type e.g. Name_ = "Episode" has Base = E(num)
@@ -567,13 +567,13 @@ func (f *Field) AppendSelectionSet(ss SelectionSetProvider) {
 // Desc string
 // Name_
 // ArgumentDefs InputValueDefs  // InputValueDefs []InputValueDef
-// Type *Type_
+// Type *GQLtype
 // Directives_
 
 // type InputValueDef struct {
 // 	Desc string
 // 	Name_
-// 	Type       *Type_
+// 	Type       *GQLtype
 // 	DefaultVal *InputValue_
 // 	Directives_
 // }
@@ -710,7 +710,7 @@ func (f *Field) String() string {
 
 type VariableDef struct {
 	sdl.Name_
-	Type       *sdl.Type_
+	Type       *sdl.GQLtype
 	DefaultVal *sdl.InputValue_
 	Value      *sdl.InputValue_ // assigned by variable statment, defined outside of operationalStmt
 }
@@ -727,7 +727,7 @@ func (v *VariableDef) AssignName(input string, loc *sdl.Loc_, err *[]error) {
 	v.Name_.AssignName(input, loc, err)
 }
 
-func (n *VariableDef) AssignType(t *sdl.Type_) {
+func (n *VariableDef) AssignType(t *sdl.GQLtype) {
 	n.Type = t
 }
 

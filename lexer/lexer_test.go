@@ -57,7 +57,7 @@ enum Episode {
 		expectedLiteral string
 	}{
 		{token.BOM, "\ufeff"},
-		{token.COMMENT, "#"},
+		//		{token.COMMENT, "#"},
 		{token.LBRACE, "{"},
 		{token.IDENT, "_1use_r"},
 		{token.LPAREN, "("},
@@ -75,7 +75,7 @@ enum Episode {
 		{token.LBRACE, "{"}, //15
 		{token.IDENT, "界"},
 		{token.COLON, ":"},
-		{token.IDENT, "String"},
+		{token.STRING, "String"},
 		{token.BANG, "!"},
 		{token.IDENT, "appearsIn"}, //20
 		{token.COLON, ":"},
@@ -95,7 +95,7 @@ enum Episode {
 		{token.IDENT, "id"}, //35
 		{token.COLON, ":"},
 		{token.FLOAT, "-4.567E-2"},
-		{token.COMMA, ","},
+		//		{token.COMMA, ","},
 		{token.IDENT, "mode"},
 		{token.COLON, ":"},
 		{token.NULL, "null"},
@@ -118,7 +118,7 @@ enum Episode {
 		{token.LPAREN, "("},
 		{token.IDENT, "message"},
 		{token.COLON, ":"},
-		{token.STRING, "\n    Hello,\n      World!\n    Yours,\n      GraphQL.\n"},
+		{token.RAWSTRING, "\n    Hello,\n      World!\n    Yours,\n      GraphQL.\n"},
 		{token.RPAREN, ")"},
 		{token.RBRACE, "}"},
 		{token.MUTATION, "mutation"},
@@ -139,9 +139,9 @@ enum Episode {
 		{token.RBRACE, "}"},
 		{token.LBRACKET, "["},
 		{token.INT, "1"},
-		{token.COMMA, ","},
+		//	{token.COMMA, ","},
 		{token.INT, "2"},
-		{token.COMMA, ","},
+		//	{token.COMMA, ","},
 		{token.INT, "-13"},
 		{token.RBRACKET, "]"},
 	}
@@ -150,16 +150,16 @@ enum Episode {
 
 	for i, tt := range tests {
 		tok := l.NextToken()
-		//	fmt.Printf("%v\n", tok)
-		fmt.Println(tok.Literal)
+		fmt.Printf("Token: %s %s\n", tok.Type, tok.Literal)
+		//	fmt.Println(tok.Literal)
 		if tok.Type != tt.expectedType {
 			t.Fatalf("tests[%d] - tokentype wrong. expected=%q, got=%q Error: %s",
-				i, tt.expectedType, tok.Type, l.Error())
+				i, tt.expectedType, tok.Type, l.err)
 		}
 
 		if tok.Literal != tt.expectedLiteral {
 			t.Fatalf("tests[%d] - literal wrong. expected=%q, got=%q Error: %s",
-				i, tt.expectedLiteral, tok.Literal, l.Error())
+				i, tt.expectedLiteral, tok.Literal, l.err)
 		}
 	}
 }
@@ -220,13 +220,13 @@ query getZuckProfile($devicePicSize: Int = 1234) {
 		//fmt.Printf("%v\n", tok)
 
 		if tok.Type != tt.expectedType {
-			t.Fatalf("tests[%d] - tokentype wrong. expected=%q, got=%q Error: %s",
-				i, tt.expectedType, tok.Type, l.Error())
+			t.Fatalf("tests[%d] - tokentype wrong. expected=%q, got=%q ",
+				i, tt.expectedType, tok.Type)
 		}
 
 		if tok.Literal != tt.expectedLiteral {
-			t.Fatalf("tests[%d] - literal wrong. expected=%q, got=%q Error: %s",
-				i, tt.expectedLiteral, tok.Literal, l.Error())
+			t.Fatalf("tests[%d] - literal wrong. expected=%q, got=%q",
+				i, tt.expectedLiteral, tok.Literal)
 		}
 	}
 }

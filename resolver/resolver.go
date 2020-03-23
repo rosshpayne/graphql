@@ -17,21 +17,19 @@ type fieldResolver interface {
 
 type ResolverFunc func(context.Context, sdl.InputValueProvider, sdl.ObjectVals) <-chan string
 
-type ResolverPath string
+type resolverPath string
 
 type Resolvers struct {
-	resolverMap map[ResolverPath]ResolverFunc
+	resolverMap map[resolverPath]ResolverFunc
 }
 
 func New() *Resolvers {
-	return &Resolvers{resolverMap: make(map[ResolverPath]ResolverFunc)}
+	return &Resolvers{resolverMap: make(map[resolverPath]ResolverFunc)}
 }
 
 func (r Resolvers) Register(path string, f ResolverFunc, override ...bool) error {
 
-	var pathField ResolverPath
-
-	pathField = ResolverPath(path)
+	var pathField resolverPath = resolverPath(path)
 
 	if _, ok := r.resolverMap[pathField]; !ok {
 		r.resolverMap[pathField] = f
@@ -47,7 +45,7 @@ func (r Resolvers) Register(path string, f ResolverFunc, override ...bool) error
 
 func (r Resolvers) GetFunc(path string) ResolverFunc {
 
-	if f, ok := r.resolverMap[ResolverPath(path)]; ok {
+	if f, ok := r.resolverMap[resolverPath(path)]; ok {
 		return f
 	}
 	return nil

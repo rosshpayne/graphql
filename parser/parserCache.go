@@ -27,7 +27,7 @@ func (t *Cache_) AddEntry(name ast.StmtName_, stmt ast.StatementDef) {
 	t.cache[string(name)] = e
 }
 
-// FetchAST is  concurrent safe.
+// FetchAST - TODO: copy code from sdl.??
 func (t *Cache_) FetchAST(name ast.StmtName_) ast.StatementDef {
 
 	name_ := string(name)

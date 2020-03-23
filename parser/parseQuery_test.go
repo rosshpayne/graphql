@@ -8,7 +8,7 @@ import (
 	"github.com/graphql/lexer"
 )
 
-func TestQueryFieldCheck(t *testing.T) {
+func TestQueryFieldCheckx(t *testing.T) {
 
 	var input = `query XYZ {
 	     allPersons(last: 2) {
@@ -27,8 +27,13 @@ func TestQueryFieldCheck(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+
+	if err := p.Resolver.Register("Query/allPersons", client.ResolverAll); err != nil {
+		p.addErr(err.Error())
+	}
+
 	d, errs := p.ParseDocument()
-	//fmt.Println(d.String())
+	fmt.Println(d.String())
 	if len(errs) > 0 {
 		t.Errorf("Unexpected, should be 0 errors, got %d", len(errs))
 		for _, v := range errs {
@@ -46,27 +51,34 @@ func TestQueryFieldCheck(t *testing.T) {
 func TestQueryOutput(t *testing.T) {
 
 	var input = `query XYZ {
-	     allPersons(last: [ 1 23 43] first: [["abc" "asdf" null] ["asdf"]]) {
-	         name 
-	         age
-	         posts {
-	         	title
-	         	author {
-	         		name
-	         		age
-	         	}
-	         }
-	         #other
-	     }
-	}
-`
+		     allPersons(last: [ 1 23 43] first: [["abc" "asdf" null] ["asdf"]]) {
+		         name
+		         age
+		         posts {
+		         	title
+		         	author {
+		         		namee
+		         		age
+		         	}
+		         }
+		         #other
+		     }
+		}
+	`
 
-	var expectedErr [1]string
-	expectedErr[0] = `Field "namee" is not in object , Person at line: 8 column: 13`
+	var expectedErr []string = []string{
+		`List cannot contain NULLs at line: 2 column: 58`,
+		`Field "namee" is not in Object "Person" at line: 8 column: 14`,
+	}
 
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
+
+	if err := p.Resolver.Register("Query/allPersons", client.ResolverAll); err != nil {
+		p.addErr(err.Error())
+	}
+
+	//p.ClearCache()
 	_, errs := p.ParseDocument()
 	for _, ex := range expectedErr {
 		if len(ex) == 0 {

@@ -763,7 +763,7 @@ var ResolverHeroArg = func(ctx context.Context, resp sdl.InputValueProvider, arg
 				index = i
 			}
 		}
-		//	s.WriteString("[" + fmt.Sprintf("%d", index) + " " + episode)
+		s.WriteString("[" + fmt.Sprintf("%d", index) + " " + episode)
 
 		//s.WriteString("{Droid:  [")
 		if episode == "EMPIRE" {
