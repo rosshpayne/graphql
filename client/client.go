@@ -158,6 +158,18 @@ func (p *Post) String() string {
 	return s.String()
 }
 
+// type Post struct {
+// 	id     int
+// 	title  string
+// 	author int
+// }
+// type Person struct {
+// 	id    int
+// 	name  string
+// 	age   [][]interface{}
+// 	other []string
+// 	posts []int
+// }
 var persons = []*Person{
 	&Person{100, "Jack Smith", [][]interface{}{[]interface{}{53, 54, 55, 56}, []interface{}{25, 26, 28, 27}}, []string{"abc", "def", "hij"}, []int{1, 2, 3}},
 	&Person{101, "Jenny Hawk", [][]interface{}{[]interface{}{25, 26, 27}, []interface{}{44, 45, 46}}, []string{"aaaaabc", "def", "hij"}, []int{3, 7, 4}},
@@ -167,7 +179,7 @@ var persons = []*Person{
 }
 var posts = []*Post{
 	&Post{1, "GraphQL for Begineers", 100}, &Post{2, "Holidays in Tuscany", 101}, &Post{3, "Sweet", 102}, &Post{4, "Programming in GO", 102}, &Post{5, "Skate Boarding Blog", 101},
-	&Post{6, "GraphQL for Architects", 100}, &Post{id: 7, title: "xyz", author: 100},
+	&Post{6, "GraphQL for Architects", 100}, &Post{id: 7, title: "How to Eat", author: 104},
 }
 
 var ResolverAll = func(ctx context.Context, resp sdl.InputValueProvider, args sdl.ObjectVals) <-chan string {

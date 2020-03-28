@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	lsdl "github.com/graph-sdl/lexer"
+	psdl "github.com/graph-sdl/parser"
 	"github.com/graphql/client"
 	"github.com/graphql/lexer"
 )
@@ -43,8 +45,130 @@ fragment comparisonFields on Character {
 	}
 	//	p.ClearCache()
 	p.SetDocument("DefaultDoc")
+	_, errs := p.ParseDocument()
+	//fmt.Println(d.String())
+	for _, ex := range expectedErr {
+		if len(ex) == 0 {
+			break
+		}
+		found := false
+		for _, err := range errs {
+			if trimWS(err.Error()) == trimWS(ex) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Expected Error = [%q]`, ex)
+		}
+	}
+	for _, got := range errs {
+		found := false
+		for _, exp := range expectedErr {
+			if trimWS(got.Error()) == trimWS(exp) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf(`Unexpected Error = [%q]`, got.Error())
+		}
+	}
+	// if compare(d.String(), input) {
+	// 	t.Errorf("Got:      [%s] \n", trimWS(d.String()))
+	// 	t.Errorf("Expected: [%s] \n", trimWS(input))
+	// 	t.Errorf(`Unexpected: program.String() wrong. `)
+	// }
+}
+
+func TestFragmentMultiExample(t *testing.T) {
+
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		type Query { hero(episode: Episode): [Character] 
+					 droid(id: ID!): [Droid] 
+					}
+		
+		enum Episode { NEWHOPE EMPIRE JEDI }
+	
+		interface Character {
+							id: ID!
+							name: String!
+							friends: [Character]
+							appearsIn: [Episode]!
+							}
+
+		type Human implements Character {
+							id: ID!
+							name: String!
+							friends: [Character]
+							appearsIn: [Episode]!
+							starships: [Starship]
+							totalCredits: Int
+							}
+
+		type Droid implements Character {
+							id: ID!
+							name: String!
+							friends: [Character]
+							appearsIn: [Episode]!
+							primaryFunction: String
+							}`
+
+		fmt.Println("Running Setup : ")
+
+		l := lsdl.New(inputSDL)
+		p := psdl.New(l)
+		_, errs := p.ParseDocument()
+		for _, v := range errs {
+			fmt.Println("Setup Error: ", v)
+		}
+		if len(errs) > 0 {
+			t.Fatal("Setup Failed")
+		}
+
+		fmt.Println("Setup completed ")
+	}
+
+	var input = ` query XYS
+	{
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	    appearsIn
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
+
+	fragment comparisonFields on Character {
+		 name
+		 friends {
+				  name
+				}
+	}
+
+`
+
+	var expectedErr [1]string
+	expectedErr[0] = ``
+
+	l := lexer.New(input)
+	p := New(l)
+
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
+		p.addErr(err.Error())
+	}
+	//	p.ClearCache()
+	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
-	fmt.Println(d.String())
+	if d != nil {
+		fmt.Println(d.String())
+	}
 	for _, ex := range expectedErr {
 		if len(ex) == 0 {
 			break
@@ -77,9 +201,60 @@ fragment comparisonFields on Character {
 	}
 }
 
-func TestShorthandOp(t *testing.T) {
+func TestFragmentResolveRetList(t *testing.T) {
 
-	var input = ` {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		type Query { hero(episode: Episode): Character #   should be [Character]
+					 droid(id: ID!): [Droid] 
+					}
+		
+		enum Episode { NEWHOPE EMPIRE JEDI }
+	
+		interface Character {
+							id: ID!
+							name: String!
+							friends: [Character]
+							appearsIn: [Episode]!
+							}
+
+		type Human implements Character {
+							id: ID!
+							name: String!
+							friends: [Character]
+							appearsIn: [Episode]!
+							starships: [Starship]
+							totalCredits: Int
+							}
+
+		type Droid implements Character {
+							id: ID!
+							name: String!
+							friends: [Character]
+							appearsIn: [Episode]!
+							primaryFunction: String
+							}`
+
+		fmt.Println("Running Setup : ")
+
+		l := lsdl.New(inputSDL)
+		p := psdl.New(l)
+		_, errs := p.ParseDocument()
+		for _, v := range errs {
+			fmt.Println("Setup Error: ", v)
+		}
+		if len(errs) > 0 {
+			t.Fatal("Setup Failed")
+		}
+
+		fmt.Println("Setup completed ")
+	}
+
+	var input = ` query
+	{
 	  leftComparison: hero(episode: NEWHOPE) {
 	    ...comparisonFields
 	  }
@@ -92,17 +267,20 @@ func TestShorthandOp(t *testing.T) {
 	  }
 	}
 
-fragment comparisonFields on Character {
-  name
-  friends {
-    name
-  }
-}
+	fragment comparisonFields on Character {
+		 name
+		 friends {
+				  name
+				}
+	}
 
 `
 
-	var expectedErr [1]string
-	expectedErr[0] = ``
+	var expectedErr []string = []string{
+		`Expected single value got List for Character at line: 10 column: 21`,
+		`Expected single value got List for Character at line: 3 column: 20`,
+		`Expected single value got List for Character at line: 6 column: 23`,
+	}
 
 	l := lexer.New(input)
 	p := New(l)

@@ -81,7 +81,7 @@ type HasSelectionSetProvider interface {
 
 type SelectionSetProvider interface {
 	SelectionSetNode()
-	checkUnresolvedTypes_(unresolved sdl.UnresolvedMap)
+	checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) // TODO: don't like this here.
 	//	Resolve()
 	String() string
 }
@@ -202,16 +202,23 @@ func (o *OperationStmt) CheckIsInputType(err *[]error) {
 
 func (o *OperationStmt) String() string { // Query will now satisfy Node interface and complete StatementDef
 	var s strings.Builder
-
-	if !o.Name.Exists() || o.Name.Name[:2] == "__" {
-		if o.Name.Name[:2] == "__" {
-			s.WriteString(fmt.Sprintf("\n %s ", o.Type))
-		} else {
-			s.WriteString(fmt.Sprintf("\n %s %s", o.Type, o.Name))
-		}
+	//
+	// Name may be system supplied for short stmts, starting with "__NONAME__"
+	//
+	if o.Name.Name[:2] == "__" || !o.Name.Exists() {
+		s.WriteString(fmt.Sprintf("\n %s ", o.Type))
 	} else {
-		s.WriteString(fmt.Sprintf(" %s %s", o.Type, o.Name))
+		s.WriteString(fmt.Sprintf("\n %s %s ", o.Type, o.Name))
 	}
+	// if !o.Name.Exists() || o.Name.Name[:2] == "__" {
+	// 	if o.Name.Name[:2] == "__" {
+	// 		s.WriteString(fmt.Sprintf("\n %s ", o.Type))
+	// 	} else {
+	// 		s.WriteString(fmt.Sprintf("\n %s %s", o.Type, o.Name))
+	// 	}
+	// } else {
+	// 	s.WriteString(fmt.Sprintf(" %s %s", o.Type, o.Name))
+	// }
 	if len(o.Variable) > 0 {
 		s.WriteString("(")
 		for _, v := range o.Variable {
@@ -240,7 +247,7 @@ func (o *OperationStmt) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
 	for _, v := range o.Variable {
 		v.checkUnresolvedTypes_(unresolved)
 	}
-	//	o.Directives_.SolicitNonScalarTypes(unresolved)
+	o.Directives_.SolicitAbstractTypes(unresolved) // TODO: should directives be included
 	for _, v := range o.SelectionSet {
 		v.checkUnresolvedTypes_(unresolved)
 	}
@@ -251,6 +258,12 @@ func (o *OperationStmt) StmtType() string {
 }
 
 func (o *OperationStmt) StmtName() StmtName_ {
+	// if !o.Name.Exists() {
+	// 	return StmtName_(o.StmtType())
+	// }
+	if !o.Name.Exists() {
+		return StmtName_("")
+	}
 	return StmtName_(o.Name.String())
 }
 
@@ -396,6 +409,10 @@ func (f *FragmentSpread) AssignName(input string, loc *sdl.Loc_, err *[]error) {
 	f.Name_ = sdl.Name_{Name: sdl.NameValue_(input), Loc: loc}
 }
 
+func (f *FragmentSpread) StmtType() string {
+	return "FragmentSpread"
+}
+
 func (f *FragmentSpread) String() string {
 	var s strings.Builder
 	s.WriteString("\n")
@@ -528,18 +545,18 @@ type QLInfo struct {
 	Dummy string
 }
 
-// Field
+// Field.		===========================================================================================================
 
 type Field struct {
 	//Type  int // Fragment, InlineFragment, Field
 	Alias sdl.Name_
 	Name  sdl.Name_ // must have atleast a name - all else can be empty
 	//
-	ParentObj sdl.GQLTypeProvider // Parent type, populated during checkField
-	ParentFld *sdl.Field_         // matching field in parent object
-	Path      string              // path to field in statement
+	SDLRootAST sdl.GQLTypeProvider // Parent type, populated during checkField. Could be sdl.Object_, sdl.Interface, sdl.Union_(??)
+	SDLFld_    *sdl.Field_         // matching field in sdl object. populated during checkField
+	Path       string              // path to field in statement
 	//
-	sdl.Arguments_
+	sdl.Arguments_ // promoted from struct: "Arguments []*ArgumentT"   ArgumenT {Name_, value InputValue_}, InputValue_ { InputValueProvider, Loc}
 	sdl.Directives_
 	SelectionSet []SelectionSetProvider //a Field whose type is an object (within the parent type to which field belongs) will have associated fields. For scalars SS wll be nil
 	//
@@ -554,6 +571,10 @@ func (f *Field) SelectionSetNode() {}
 
 func (f *Field) AppendSelectionSet(ss SelectionSetProvider) {
 	f.SelectionSet = append(f.SelectionSet, ss)
+}
+
+func (f *Field) StmtType() string { // to support NameI - not relevant for Field
+	return ""
 }
 
 // type GQLtype struct {
@@ -754,6 +775,7 @@ func (a *VariableDef) checkInputValueType(err *[]error) {
 
 type NameI interface {
 	AssignName(name string, loc *sdl.Loc_, err *[]error)
+	StmtType() string
 }
 
 // =================================================================
