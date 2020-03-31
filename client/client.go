@@ -198,7 +198,8 @@ var ResolverAll = func(ctx context.Context, resp sdl.InputValueProvider, args sd
 				}
 			}
 		}
-		s.WriteString("{data: [")
+		//	s.WriteString("{data: [")
+		s.WriteString("{Person: [")
 		for i, v := range persons {
 			if i > last_-1 {
 				break

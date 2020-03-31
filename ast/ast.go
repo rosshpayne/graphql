@@ -44,11 +44,10 @@ const (
 type Statement struct {
 	Type    string // Operational | Fragment
 	Name    string
-	AST     StatementDef
-	RootAST sdl.GQLTypeProvider
+	AST     GQLStmtProvider     // AST of operational stmt (query,mutation,sub) or Fragment stmt
+	RootAST sdl.GQLTypeProvider // AST of type which represents the entry point to the graph, from schema(query:<entryType>,... Typically type Query.
 }
 type Document struct {
-	//Statements []StatementDef
 	Statements []*Statement
 }
 
@@ -81,7 +80,7 @@ type HasSelectionSetProvider interface {
 
 type SelectionSetProvider interface {
 	SelectionSetNode()
-	checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) // TODO: don't like this here.
+	SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) // TODO: don't like this here.
 	//	Resolve()
 	String() string
 }
@@ -90,7 +89,7 @@ type StmtName_ string
 
 //========= statement def ============
 
-type StatementDef interface {
+type GQLStmtProvider interface {
 	//Node()
 	StatementNode()
 	//TypeSystemNode()
@@ -200,7 +199,7 @@ func (o *OperationStmt) CheckIsInputType(err *[]error) {
 
 // SetName, validates input string and assigns to field Name
 
-func (o *OperationStmt) String() string { // Query will now satisfy Node interface and complete StatementDef
+func (o *OperationStmt) String() string { // Query will now satisfy Node interface and complete GQLStmtProvider
 	var s strings.Builder
 	//
 	// Name may be system supplied for short stmts, starting with "__NONAME__"
@@ -245,11 +244,11 @@ func (o *OperationStmt) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
 	//  either a type (SDL) or a fragment (statement). However SDL are only checked during checkField function.
 	// check any unresolved fragments
 	for _, v := range o.Variable {
-		v.checkUnresolvedTypes_(unresolved)
+		v.SolicitNonScalarTypes(unresolved)
 	}
 	o.Directives_.SolicitAbstractTypes(unresolved) // TODO: should directives be included
 	for _, v := range o.SelectionSet {
-		v.checkUnresolvedTypes_(unresolved)
+		v.SolicitNonScalarTypes(unresolved)
 	}
 }
 
@@ -319,7 +318,7 @@ func (f *FragmentStmt) AssignTypeCond(input string, loc *sdl.Loc_, err *[]error)
 	f.TypeCond = sdl.Name_{Name: sdl.NameValue_(input), Loc: loc}
 }
 
-func (f *FragmentStmt) String() string { // Query will now satisfy Node interface and complete StatementDef
+func (f *FragmentStmt) String() string { // Query will now satisfy Node interface and complete GQLStmtProvider
 	var s strings.Builder
 	tc = 1
 	s.WriteString("\nfragment ")
@@ -341,20 +340,11 @@ func (f *FragmentStmt) String() string { // Query will now satisfy Node interfac
 
 func (f *FragmentStmt) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
 
-	// type GQLtype struct {
-	// 	Constraint byte            // each on bit from right represents not-null constraint applied e.g. in nested list type [type]! is 00000010, [type!]! is 00000011, type! 00000001
-	// 	AST        GQLTypeProvider // AST instance of type. WHen would this be used??. Used for non-Scalar types. AST in cache(typeName), then in GQLtype(typeName). If not in GQLtype, check cache, then DB.
-	// 	Depth      int             // depth of nested List e.g. depth 2 is [[type]]. Depth 0 implies non-list type, depth > 0 is a list type
-	// 	Name_                      // type name. inherit AssignName(). Use Name_ to access AST via cache lookup. ALternatively, use AST above or TypeFlag_ instead of string.
-	// }
-	// TODO: do not reference cache in methods - performn in parser
-	// if pse.CacheFetch(f.TypeCond.Name) {
-	// 	ty := sdl.GQLtype{Name_: f.TypeCond}
 	unresolved[f.TypeCond] = nil //&ty
 	// }
-	//f.Directives_.SolicitNonScalarTypes(unresolved)
+	f.Directives_.SolicitAbstractTypes(unresolved)
 	for _, v := range f.SelectionSet {
-		v.checkUnresolvedTypes_(unresolved)
+		v.SolicitNonScalarTypes(unresolved)
 	}
 }
 
@@ -397,8 +387,9 @@ type FragmentSpread struct {
 
 func (f *FragmentSpread) SelectionSetNode() {}
 
-//func (f *FragmentSpread) Resolve()                                           {}
-func (f *FragmentSpread) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {} // TODO - do we want to add Name to unresolved to check that its associated with a actual Fragment Statement
+// not SDL type information can be specified in spread, however we should resolve associated fragment stmt. NO. Fragment stmt will always be defined in query document.
+// TODO: consider Fragment library stored in db. This could be dangerous as defnition is not stored with query and could lead to errors very easily e.g. db def gets changed by someone.
+func (f *FragmentSpread) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {}
 
 //func (f *FragementSpread) ExecutableDefinition() {}
 
@@ -440,12 +431,12 @@ func (f *InlineFragment) SelectionSetNode() {}
 
 //func (f *InlineFragment) Resolve()          {}
 func (f *InlineFragment) FragmentNode() {}
-func (f *InlineFragment) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {
+func (f *InlineFragment) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
 	if f.TypeCond.Exists() {
-		unresolved[sdl.Name_(f.TypeCond)] = nil
+		unresolved[f.TypeCond] = nil
 	}
 	for _, v := range f.SelectionSet {
-		v.checkUnresolvedTypes_(unresolved)
+		v.SolicitNonScalarTypes(unresolved)
 	}
 }
 
@@ -491,7 +482,7 @@ func (f *InlineFragment) CheckOnCondType(err *[]error, cache *pse.Cache_) {
 }
 func (f *InlineFragment) CheckInputValueType(err *[]error) {}
 
-func (f *InlineFragment) String() string { // Query will now satisfy Node interface and complete StatementDef
+func (f *InlineFragment) String() string { // Query will now satisfy Node interface and complete GQLStmtProvider
 	var s strings.Builder
 	s.WriteString("\n")
 	tabs := tc
@@ -553,7 +544,7 @@ type Field struct {
 	Name  sdl.Name_ // must have atleast a name - all else can be empty
 	//
 	SDLRootAST sdl.GQLTypeProvider // Parent type, populated during checkField. Could be sdl.Object_, sdl.Interface, sdl.Union_(??)
-	SDLFld_    *sdl.Field_         // matching field in sdl object. populated during checkField
+	SDLfld     *sdl.Field_         // matching field in sdl object. populated during checkField
 	Path       string              // path to field in statement
 	//
 	sdl.Arguments_ // promoted from struct: "Arguments []*ArgumentT"   ArgumenT {Name_, value InputValue_}, InputValue_ { InputValueProvider, Loc}
@@ -640,7 +631,7 @@ func (f *Field) ExpandArguments(root *sdl.Field_, err *[]error) (failed bool) {
 	return failed
 }
 
-func (f *Field) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {
+func (f *Field) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
 	// get type of the field
 	// TODO need to have type name associated with this field either in Field struct or passed into checkUnresolvedType
 	//      also sdl.CacheFetch need type name passed in not field name
@@ -648,9 +639,11 @@ func (f *Field) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {
 	// if len(f.SelectionSet) != 0 { // non-Scalar type
 	// 	unresolved[f.Name] = nil
 	// }
-	//	f.Directives_.SolicitNonScalarTypes(unresolved)
+	f.Directives_.SolicitAbstractTypes(unresolved)
+	// TODO - need the type for the arguments.
+	//f.Arguments_.SolicitAbstractTypes(unresolved) // added 31 March 2020
 	for _, v := range f.SelectionSet {
-		v.checkUnresolvedTypes_(unresolved)
+		v.SolicitNonScalarTypes(unresolved)
 	}
 }
 
@@ -752,7 +745,7 @@ func (n *VariableDef) AssignType(t *sdl.GQLtype) {
 	n.Type = t
 }
 
-func (n *VariableDef) checkUnresolvedTypes_(unresolved sdl.UnresolvedMap) {
+func (n *VariableDef) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
 	if !n.Type.IsScalar() {
 		if n.Type.AST == nil {
 			// check in cache only at this stage.

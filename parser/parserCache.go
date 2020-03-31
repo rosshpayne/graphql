@@ -9,7 +9,7 @@ import (
 // for fragment  & operatinal statments
 type entry struct {
 	ready chan struct{}
-	data  ast.StatementDef
+	data  ast.GQLStmtProvider
 }
 
 type Cache_ struct {
@@ -22,13 +22,13 @@ func NewCache() *Cache_ {
 }
 
 // AddEntry is not concurrent safe. Intended for a single thread operation.
-func (t *Cache_) AddEntry(name ast.StmtName_, stmt ast.StatementDef) {
+func (t *Cache_) AddEntry(name ast.StmtName_, stmt ast.GQLStmtProvider) {
 	e := &entry{data: stmt}
 	t.cache[string(name)] = e
 }
 
 // FetchAST - TODO: copy code from sdl.??
-func (t *Cache_) FetchAST(name ast.StmtName_) ast.StatementDef {
+func (t *Cache_) FetchAST(name ast.StmtName_) ast.GQLStmtProvider {
 
 	name_ := string(name)
 	e, ok := t.cache[name_]

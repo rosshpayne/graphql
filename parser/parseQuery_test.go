@@ -251,19 +251,15 @@ func TestQuerySingleResolverLast2a(t *testing.T) {
 
 		var expectedErr []string
 
-		result, errs := p.ExecuteDocument(doc)
+		result, errs := p.ExecuteDocument()
 
-		if len(errs) == 0 {
-			if compare(result, expectedResult) {
-				t.Errorf("Got:      [%s] \n", trimWS(result))
-				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
-				t.Errorf(`Unexpected: JSON output wrong. `)
-			} else {
-				t.Log(result)
-			}
-		} else {
-			checkErrors(errs, expectedErr, t)
+		checkErrors(errs, expectedErr, t)
+		if compare(result, expectedResult) {
+			t.Errorf("Got:      [%s] \n", trimWS(result))
+			t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+			t.Errorf(`Unexpected: JSON output wrong. `)
 		}
+		t.Log(result)
 	}
 	//
 	// Teardown
@@ -380,19 +376,15 @@ func TestQuerySingleResolverLast2b(t *testing.T) {
 
 		var expectedErr []string
 
-		result, errs := p.ExecuteDocument(doc)
+		result, errs := p.ExecuteDocument()
 
-		if len(errs) == 0 {
-			if compare(result, expectedResult) {
-				t.Errorf("Got:      [%s] \n", trimWS(result))
-				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
-				t.Errorf(`Unexpected: JSON output wrong. `)
-			} else {
-				t.Log(result)
-			}
-		} else {
-			checkErrors(errs, expectedErr, t)
+		checkErrors(errs, expectedErr, t)
+		if compare(result, expectedResult) {
+			t.Errorf("Got:      [%s] \n", trimWS(result))
+			t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+			t.Errorf(`Unexpected: JSON output wrong. `)
 		}
+		t.Log(result)
 	}
 	//
 	// Teardown
@@ -485,19 +477,15 @@ func TestQuerySingleResolverLast1(t *testing.T) {
 
 		var expectedErr []string
 
-		result, errs := p.ExecuteDocument(doc)
+		result, errs := p.ExecuteDocument()
 
-		if len(errs) == 0 {
-			if compare(result, expectedResult) {
-				t.Errorf("Got:      [%s] \n", trimWS(result))
-				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
-				t.Errorf(`Unexpected: JSON output wrong. `)
-			} else {
-				t.Log(result)
-			}
-		} else {
-			checkErrors(errs, expectedErr, t)
+		checkErrors(errs, expectedErr, t)
+		if compare(result, expectedResult) {
+			t.Errorf("Got:      [%s] \n", trimWS(result))
+			t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+			t.Errorf(`Unexpected: JSON output wrong. `)
 		}
+		t.Log(result)
 	}
 	//
 	// Teardown
@@ -525,13 +513,14 @@ func TestQueryTwoResolver_43(t *testing.T) {
 	     allPersons(last: 2 ) {
 	         name 
 	         age
-	         WhatAmIReading: posts { # error here... Type definition lists single value, resolver returns List	  posts (resp: [Int!]) : Post! 
+	         WhatAmIReading: posts { 
 	         	title
 	         	author  {
 	         		name
 	         		age
 	         	}
 	         }
+	         age
 	         #other
 	     }
 	}
@@ -613,23 +602,19 @@ func TestQueryTwoResolver_43(t *testing.T) {
 	if err := p.Resolver.Register("Query/allPersons/posts", client.ResolvePosts); err != nil {
 		p.addErr(err.Error())
 	}
-	doc, errs := p.ParseDocument(schema)
+	_, errs := p.ParseDocument(schema)
 	checkErrors(errs, expectedErr, t)
 	if len(errs) == 0 {
 
-		result, errs := p.ExecuteDocument(doc)
+		result, errs := p.ExecuteDocument()
 
-		if len(errs) == 0 {
-			if compare(result, expectedResult) {
-				t.Errorf("Got:      [%s] \n", trimWS(result))
-				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
-				t.Errorf(`Unexpected: JSON output wrong. `)
-			} else {
-				t.Log(result)
-			}
-		} else {
-			checkErrors(errs, expectedErr, t)
+		checkErrors(errs, expectedErr, t)
+		if compare(result, expectedResult) {
+			t.Errorf("Got:      [%s] \n", trimWS(result))
+			t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+			t.Errorf(`Unexpected: JSON output wrong. `)
 		}
+		t.Log(result)
 	}
 	//
 	// Teardown
@@ -689,25 +674,21 @@ func TestQueryTwinResolverX(t *testing.T) {
 	if err := p.Resolver.Register("Query/allPersons/posts/author/age", client.ResolveAge); err != nil {
 		p.addErr(err.Error())
 	}
-	doc, errs := p.ParseDocument(schema)
+	_, errs := p.ParseDocument(schema)
 	checkErrors(errs, expectedErr, t)
 	if len(errs) == 0 {
 
 		expectedErr := []string{`Resolver returned a list, expected a single item for Person at line: 2 column: 7`}
 
-		result, errs := p.ExecuteDocument(doc)
+		result, errs := p.ExecuteDocument()
 
-		if len(errs) == 0 {
-			if compare(result, expectedResult) {
-				t.Errorf("Got:      [%s] \n", trimWS(result))
-				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
-				t.Errorf(`Unexpected: JSON output wrong. `)
-			} else {
-				t.Log(result)
-			}
-		} else {
-			checkErrors(errs, expectedErr, t)
+		checkErrors(errs, expectedErr, t)
+		if compare(result, expectedResult) {
+			t.Errorf("Got:      [%s] \n", trimWS(result))
+			t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+			t.Errorf(`Unexpected: JSON output wrong. `)
 		}
+		t.Log(result)
 	}
 }
 
@@ -1054,8 +1035,12 @@ func TestQueryInvalidArguments_45(t *testing.T) {
 	     }
 	}
 `
-
-	expectedErr := []string{`Field "address" is not a member of "posts" (type Object "Post") at line: 11 column: 14`}
+	expectedErr := []string{
+		`Field "address" is not a member of "posts" (SDL Object "Post") at line: 11 column: 14`,
+		`Field argument "author" is not defined in type "Person", at line: 6 column: 19`,
+		`Field argument "name" is not defined in type "Post", at line: 7 column: 21`,
+		`Field argument "age" is not defined in type "Post", at line: 7 column: 33`,
+	}
 
 	l := lexer.New(input)
 	p := New(l)
@@ -1084,7 +1069,7 @@ func TestQueryFieldCheckWithFragmentSpreadDirective(t *testing.T) {
 	}
 `
 
-	expectedErr := []string{`Field "address" is not in object, Post at line: 11 column: 14`}
+	expectedErr := []string{`Field "address" is not a member of "posts" (SDL Object "Post") at line: 11 column: 14`}
 
 	l := lexer.New(input)
 	p := New(l)
@@ -1094,6 +1079,14 @@ func TestQueryFieldCheckWithFragmentSpreadDirective(t *testing.T) {
 
 }
 func TestQueryWithFragmentSpreadDirectiveFALSE(t *testing.T) {
+	//
+	// Setup
+	//
+	{
+
+		inputSDL := `type Query {allPersons(last : Int first : Int ) : [Person!]}`
+		setup(inputSDL, t)
+	}
 
 	var input = `query XYZ ($expandedInfo: Boolean = false) {
 	     allPersons(last: 2) {
@@ -1108,67 +1101,267 @@ func TestQueryWithFragmentSpreadDirectiveFALSE(t *testing.T) {
 	         	 }
 	         	}
 	         }
-	         age
 	     }
 	}
 `
 
 	var expectedErr []string
 
-	var expectedResult string
+	expectedResult := `{
+        data: {
+         allPersons : [ 
+         {
+         aliasN : "Jack Smith"
+         }
+         {
+         aliasN : "Jenny Hawk"
+         }  ]
+        }
+        }	`
 
 	l := lexer.New(input)
 	p := New(l)
-	doc, errs := p.ParseDocument()
+	//
+	// assign Resolver
+	//
+
+	_, errs := p.ParseDocument()
 
 	checkErrors(errs, expectedErr, t)
 
 	if len(errs) == 0 {
-
+		if err := p.Resolver.Register("Query/allPersons", client.ResolverAll); err != nil {
+			p.addErr(err.Error())
+		}
 		var expectedErr []string
 
-		result, errs := p.ExecuteDocument(doc)
+		result, errs := p.ExecuteDocument()
 
-		if len(errs) == 0 {
-			if compare(result, expectedResult) {
-				t.Errorf("Got:      [%s] \n", trimWS(result))
-				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
-				t.Errorf(`Unexpected: JSON output wrong. `)
-			} else {
-				t.Log(result)
-			}
-		} else {
-			checkErrors(errs, expectedErr, t)
+		checkErrors(errs, expectedErr, t)
+		if compare(result, expectedResult) {
+			t.Errorf("Got:      [%s] \n", trimWS(result))
+			t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+			t.Errorf(`Unexpected: JSON output wrong. `)
 		}
+		t.Log(result)
 	}
+}
+
+func TestQueryInlineFragmentWithSameAttributeTrue(t *testing.T) {
+
+	var input = `query XYZ ($expandedInfo: Boolean = true) {
+		     allPersons(last: 2) {
+		         aliasN: name
+		         ... @include(if: $expandedInfo) {
+		         	age
+		         	posts {
+		         	 title
+		         	 author {
+		         	 	name
+		         	 	age
+		         	 }
+		         	}
+		         }
+		         age
+		     }
+		}
+	`
+
+	var expectedErr []string = []string{
+		`Field "Person.Query/allPersons/age" has already been specified at line: 14 column: 12`,
+	}
+
+	expectedResult := ``
+
+	l := lexer.New(input)
+	p := New(l)
+	//
+	// assign Resolver
+	//
+	_, errs := p.ParseDocument()
+
+	checkErrors(errs, expectedErr, t)
+
+	if len(errs) == 0 {
+		if err := p.Resolver.Register("Query/allPersons", client.ResolverAll); err != nil {
+			p.addErr(err.Error())
+		}
+		var expectedErr []string
+
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, expectedErr, t)
+		if compare(result, expectedResult) {
+			t.Errorf("Got:      [%s] \n", trimWS(result))
+			t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+			t.Errorf(`Unexpected: JSON output wrong. `)
+		}
+		t.Log(result)
+	}
+
+}
+func TestQueryInlineFragmentWithSameAttributeFALSE(t *testing.T) {
+
+	var input = `query XYZ ($expandedInfo: Boolean = false) {
+		     allPersons(last: 2) {
+		         aliasN: name
+		         ... @include(if: $expandedInfo) {
+		         	age
+		         	posts {
+		         	 title
+		         	 author {
+		         	 	name
+		         	 	age
+		         	 }
+		         	}
+		         }
+		         age
+		     }
+		}
+	`
+
+	var expectedErr []string = []string{
+		`Field "Person.Query/allPersons/age" has already been specified at line: 14 column: 12`,
+	}
+
+	expectedResult := ``
+
+	l := lexer.New(input)
+	p := New(l)
+	//
+	// assign Resolver
+	//
+	_, errs := p.ParseDocument()
+
+	checkErrors(errs, expectedErr, t)
+
+	if len(errs) == 0 {
+		if err := p.Resolver.Register("Query/allPersons", client.ResolverAll); err != nil {
+			p.addErr(err.Error())
+		}
+		var expectedErr []string
+
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, expectedErr, t)
+		if compare(result, expectedResult) {
+			t.Errorf("Got:      [%s] \n", trimWS(result))
+			t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+			t.Errorf(`Unexpected: JSON output wrong. `)
+		}
+		t.Log(result)
+	}
+
 }
 
 func TestQueryWithFragmentSpreadDirectiveTRUE(t *testing.T) {
 
 	var input = `query XYZ ($expandedInfo: Boolean = true) {
-	     allPersons(last: 2) {
-	         aliasN: name 
-	         ... @include(if: $expandedInfo) {
-	         	age
-	         	posts {
-	         	 title
-	         	 author {
-	         	 	name
-	         	 	age
-	         	 }
-	         	}
-	         }
-	         age
-	     }
-	}
-`
+		     allPersons(last: 2) {
+		         aliasN: name
+		         ... @include(if: $expandedInfo) {
+		         	age
+		         	posts {
+		         	 title
+		         	 author {
+		         	 	name
+		         	 	age
+		         	 }
+		         	}
+		         }
+		     }
+		}
+	`
 
-	var expectedErr []string = []string{`Field "Person.age" has already been specified at line: 14 column: 11`}
+	var expectedErr []string
 
+	expectedResult := `        {
+        data: {
+         allPersons : [ 
+         {
+         aliasN : "Jack Smith"
+                 age : [  [  53 54 55 56 ]  [  25 26 28 27 ]  ] 
+                 posts : [ 
+                         {
+                         title : "GraphQL for Begineers"
+                         author : [ 
+                                 {
+                                 name : "Jack Smith"
+                                 age : [  [  53 54 55 56 ]  [  25 26 28 27 ]  ] 
+                                 } ] 
+                         }
+                         {
+                         title : "Holidays in Tuscany"
+                         author : [ 
+                                 {
+                                 name : "Jenny Hawk"
+                                 age : [  [  25 26 27 ]  [  44 45 46 ]  ] 
+                                 } ] 
+                         }
+                         {
+                         title : "Sweet"
+                         author : [ 
+                                 {
+                                 name : "Sabastian Jackson"
+                                 age : [  [  44 45 46 ]  [  54 55 56 57 ]  ] 
+                                 } ] 
+                         } ] 
+         }
+         {
+         aliasN : "Jenny Hawk"
+                 age : [  [  25 26 27 ]  [  44 45 46 ]  ] 
+                 posts : [ 
+                         {
+                         title : "Sweet"
+                         author : [ 
+                                 {
+                                 name : "Sabastian Jackson"
+                                 age : [  [  44 45 46 ]  [  54 55 56 57 ]  ] 
+                                 } ] 
+                         }
+                         {
+                         title : "How to Eat"
+                         author : [ 
+                                 {
+                                 name : "Kathlyn Host"
+                                 age : [  [  33 32 31 ]  [  33 32 31 ]  ] 
+                                 } ] 
+                         }
+                         {
+                         title : "Programming in GO"
+                         author : [ 
+                                 {
+                                 name : "Sabastian Jackson"
+                                 age : [  [  44 45 46 ]  [  54 55 56 57 ]  ] 
+                                 } ] 
+                         } ] 
+         }  ]
+        }
+        }`
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
+	//
+	// assign Resolver
+	//
 	_, errs := p.ParseDocument()
+
 	checkErrors(errs, expectedErr, t)
+
+	if len(errs) == 0 {
+		if err := p.Resolver.Register("Query/allPersons", client.ResolverAll); err != nil {
+			p.addErr(err.Error())
+		}
+		var expectedErr []string
+
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, expectedErr, t)
+		if compare(result, expectedResult) {
+			t.Errorf("Got:      [%s] \n", trimWS(result))
+			t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+			t.Errorf(`Unexpected: JSON output wrong. `)
+		}
+		t.Log(result)
+	}
 
 }
