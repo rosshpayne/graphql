@@ -124,7 +124,7 @@ type FragmentDef interface {
 	GetSelectionSet() []SelectionSetProvider
 	AssignTypeCond(string, *sdl.Loc_, *[]error)
 	//	Executable
-	CheckOnCondType(*[]error, *pse.Cache_)
+	AssignTypeCondAST(*[]error, *pse.Cache_)
 }
 
 // // == ExecutableDefinition - end
@@ -348,21 +348,31 @@ func (f *FragmentStmt) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
 	}
 }
 
-func (f *FragmentStmt) CheckOnCondType(err *[]error, cache *pse.Cache_) {
+func (f *FragmentStmt) AssignTypeCondAST(err *[]error, cache *pse.Cache_) {
 	// TODO - fix  dont use cache in type stmt methos
-	x, err_ := cache.FetchAST(f.TypeCond.Name)
-	if err_ != nil {
-		*err = append(*err, err_)
-	}
-	if x == nil {
-		*err = append(*err, fmt.Errorf(`Type Condition for fragment "%s" not found`, f.Name))
-		return
-	}
-	switch x.(type) {
-	case *sdl.Object_, *sdl.Union_, *sdl.Interface_:
-		f.TypeCondAST = x
-	default:
-		*err = append(*err, fmt.Errorf(`Type Condition "%s" for fragment "%s" must be an Object, Union or Interface %s`, f.TypeCond, f.Name, f.Name.AtPosition()))
+	if f.TypeCondAST == nil {
+		x, err_ := cache.FetchAST(f.TypeCond.Name)
+		if err_ != nil {
+			*err = append(*err, err_)
+		}
+		if x == nil {
+			*err = append(*err, fmt.Errorf(`Type Condition for fragment "%s" not found`, f.Name))
+			return
+		}
+		switch x.(type) {
+		case *sdl.Object_, *sdl.Union_, *sdl.Interface_:
+			f.TypeCondAST = x
+		default:
+			*err = append(*err, fmt.Errorf(`Type Condition "%s" for fragment "%s" must be an Object, Union or Interface %s`, f.TypeCond, f.Name, f.Name.AtPosition()))
+
+		}
+	} else {
+		switch f.TypeCondAST.(type) {
+		case *sdl.Object_, *sdl.Union_, *sdl.Interface_:
+		default:
+			*err = append(*err, fmt.Errorf(`Type Condition "%s" for fragment "%s" must be an Object, Union or Interface %s`, f.TypeCond, f.Name, f.Name.AtPosition()))
+
+		}
 	}
 }
 
@@ -420,8 +430,8 @@ func (f *FragmentSpread) String() string {
 type InlineFragment struct {
 	//
 	//Parent      HasSelectionSetProvider
-	TypeCond    sdl.Name_ // supplied by typeCondition if specified, otherwise its the type of the parent object's selectionset.
-	TypeCondAST sdl.GQLTypeProvider
+	TypeCond    sdl.Name_           // supplied by typeCondition if specified, otherwise its the type of the parent object's selectionset.
+	TypeCondAST sdl.GQLTypeProvider // populated during checkField??
 	//
 	sdl.Directives_
 	SelectionSet []SelectionSetProvider // { only fields and ... fragments. Nil when no TypeCond and adopts selectionSet of enclosing context.
@@ -460,25 +470,32 @@ func (f *InlineFragment) GetSelectionSet() []SelectionSetProvider {
 	return f.SelectionSet
 }
 
-func (f *InlineFragment) CheckOnCondType(err *[]error, cache *pse.Cache_) {
-	if len(f.TypeCond.Name) == 0 {
-		return
+func (f *InlineFragment) AssignTypeCondAST(err *[]error, cache *pse.Cache_) {
+	if f.TypeCondAST == nil {
+		x, err_ := cache.FetchAST(f.TypeCond.Name)
+		if err_ != nil {
+			*err = append(*err, err_)
+		}
+		if x == nil {
+			*err = append(*err, fmt.Errorf(`Type Condition for inline fragment not found`))
+			return
+		}
+		switch x.(type) {
+		case *sdl.Object_, *sdl.Union_, *sdl.Interface_:
+			f.TypeCondAST = x
+		default:
+			*err = append(*err, fmt.Errorf(`Type Condition "%s" for inline fragment must be an Object, Union or Interface`, f.TypeCond))
+
+		}
+	} else {
+		switch f.TypeCondAST.(type) {
+		case *sdl.Object_, *sdl.Union_, *sdl.Interface_:
+		default:
+			*err = append(*err, fmt.Errorf(`Type Condition "%s" for inline fragment must be an Object, Union or Interface`, f.TypeCond))
+
+		}
 	}
-	//
-	x, err_ := cache.FetchAST(f.TypeCond.Name)
-	if err_ != nil {
-		*err = append(*err, err_)
-	}
-	if x == nil {
-		*err = append(*err, fmt.Errorf(`Type Condition for inline fragment not found`))
-		return
-	}
-	switch x.(type) {
-	case *sdl.Object_, *sdl.Union_, *sdl.Interface_:
-		f.TypeCondAST = x
-	default:
-		*err = append(*err, fmt.Errorf(`Type Condition "%s" for inline fragment must be an Object, Union or Interface`, f.TypeCond))
-	}
+
 }
 func (f *InlineFragment) CheckInputValueType(err *[]error) {}
 
@@ -640,7 +657,7 @@ func (f *Field) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
 	// 	unresolved[f.Name] = nil
 	// }
 	f.Directives_.SolicitAbstractTypes(unresolved)
-	// TODO - need the type for the arguments.
+	// TODO - need the type nane for the arguments, as its the type we want to resolve.
 	//f.Arguments_.SolicitAbstractTypes(unresolved) // added 31 March 2020
 	for _, v := range f.SelectionSet {
 		v.SolicitNonScalarTypes(unresolved)

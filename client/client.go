@@ -632,8 +632,8 @@ var ResolverHero2 = func(ctx context.Context, resp sdl.InputValueProvider, args 
 		//	s.WriteString("[" + fmt.Sprintf("%d", index) + " " + episode)
 
 		//s.WriteString("{Droid:  [")
-		if episode == "DRTYPE" {
-			s.WriteString("{Droid:  [") // becomes respType in parser executeStmt_(). When type of response is an Interface then "on Human" & "on Droid" will use respType to determine which to use.
+		if episode == "EMPIRE" {
+			s.WriteString("{droid:  [") // becomes respType in parser executeStmt_(). When type of response is an Interface then "on Human" & "on Droid" will use respType to determine which to use.
 			for _, v := range droid {
 				var found bool
 				for _, k := range v.appearsIn {
@@ -645,6 +645,79 @@ var ResolverHero2 = func(ctx context.Context, resp sdl.InputValueProvider, args 
 					s.WriteString(v.String())
 					s.WriteString(",")
 				}
+			}
+
+		} else {
+			s.WriteString("{Human:  [")
+			for _, v := range humans {
+				var found bool
+				for _, k := range v.appearsIn {
+					if k == index {
+						found = true
+					}
+				}
+				if found {
+					s.WriteString(v.String())
+					s.WriteString(",")
+				}
+			}
+		}
+		s.WriteString("] }")
+		// simulate very slow db access
+		time.Sleep(650 * time.Millisecond)
+		return s.String()
+	}
+
+	gql := make(chan string)
+	go func() {
+		// blocing wait. Unblocked when server starts listening on gql channel or Done channel closed by timeout
+		select {
+		case <-ctx.Done():
+			return
+		case gql <- f():
+			return
+		}
+	}()
+
+	return gql
+}
+
+var ResolverDroid = func(ctx context.Context, resp sdl.InputValueProvider, args sdl.ObjectVals) <-chan string {
+	var (
+		id    string
+		index int
+		s     strings.Builder
+	)
+
+	f := func() string {
+		for _, v := range args {
+
+			if v.Name_.EqualString("id") {
+				if x, ok := v.Value.InputValueProvider.(*sdl.Int_); ok {
+					id = x.String()
+				}
+			}
+		}
+		//	s.WriteString("[" + fmt.Sprintf("%d", index) + " " + episode)
+
+		//s.WriteString("{Droid:  [")
+		if id != "1" {
+			// var droid = []*Droid{
+			// 	&Droid{i: 1, id: "Ljeiike", name: "Dro-RK9", friends: []int{2, 3, 4}, appearsIn: []int{3}, primaryFunction: "Diplomat"},
+			// 	&Droid{i: 2, id: "ewxdfw23e", name: "Dro-P78", friends: []int{4, 3}, appearsIn: []int{3}, primaryFunction: "Multifunction"},
+			// }
+			s.WriteString("{Droid:  [") // becomes respType in parser executeStmt_(). When type of response is an Interface then "on Human" & "on Droid" will use respType to determine which to use.
+			for _, v := range droid {
+				//var found bool
+				// for _, k := range v.appearsIn {
+				// 	if k == index {
+				// 		found = true
+				// 	}
+				// }
+				// if found {
+				s.WriteString(v.String())
+				s.WriteString(",")
+				// }
 			}
 
 		} else {

@@ -384,7 +384,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		if stmt.Type != "fragment" {
 			continue
 		}
-		x, ok := stmt.AST.(*ast.FragmentStmt)
+		_, ok := stmt.AST.(*ast.FragmentStmt)
 		if !ok {
 			continue
 		}
@@ -396,7 +396,6 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		}
 		// check all fields belonging to the respective root type (type that defines fields in { }) & check for duplicate fields
 		p.checkFields(nil, stmt.AST)
-		x.CheckOnCondType(&p.perror, p.tyCache)
 		//x.CheckIsInputType(&p.perror)
 		//
 		// add to cache
@@ -840,24 +839,29 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 			// sdl.Directives_
 			// SelectionSet []SelectionSetProvider // { only fields and ... fragments. Nil when no TypeCond and adopts selectionSet of enclosing context.
 			//
-			fragAST := root
+			root := root
 			fmt.Println("checkFields_ : for Inline fragment Spread - qry.Name ", qry.TypeCond)
-			if _, ok := fragAST.(*sdl.Union_); ok {
+			if _, ok := root.(*sdl.Union_); ok {
 				if !qry.TypeCond.Exists() {
-					p.addErr(fmt.Sprintf(`As root type, "%s" is a union inline fragment must have an on clause`, fragAST.TypeName()))
+					p.addErr(fmt.Sprintf(`As root type, "%s" is a union inline fragment must have an on clause`, root.TypeName()))
 					return
 				}
 			}
+			//
+			// if no Type condition is defined in stmt then set to enclosing type
+			//
 			if !qry.TypeCond.Exists() {
-				// base type cond on query field's parent  type
-				//qry.TypeCond = sdl.Name_{Name: sdl.NameValue_(root.TypeName())}
-				qry.TypeCondAST = fragAST
-				qry.TypeCond = sdl.Name_{Name: sdl.NameValue_(fragAST.TypeName())}
+				qry.TypeCond = sdl.Name_{Name: sdl.NameValue_(root.TypeName())}
+				qry.TypeCondAST = root
 			}
 			// check cond type is appropriate i.e object, interface, union
-			qry.CheckOnCondType(&p.perror, p.tyCache)
+			qry.AssignTypeCondAST(&p.perror, p.tyCache)
+			//
+			// compare field's enclosing type (root) with field's type (qry)
+			//
+			switch x := root.(type) {
 
-			if x, ok := fragAST.(*sdl.Union_); ok {
+			case *sdl.Union_:
 				// check type cond satisifies union
 				var found bool
 				for _, v := range x.NameS {
@@ -866,13 +870,35 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					}
 				}
 				if !found {
-					p.addErr(fmt.Sprintf(`On condition type not a member of union type, "%s"`, fragAST.TypeName()))
+					p.addErr(fmt.Sprintf(`On condition type not a member of union type, "%s"`, root.TypeName()))
 					return
 				}
-				fragAST = qry.TypeCondAST
-			} else {
-				fragAST = qry.TypeCondAST
+				root = qry.TypeCondAST
+
+			case *sdl.Interface_:
+				var found bool
+				//
+				// does field implement interface
+				//
+				switch y := qry.TypeCondAST.(type) {
+				case *sdl.Object_:
+					for _, v := range y.Implements {
+						if v.EqualString(root.TypeName().String()) {
+							found = true
+						}
+					}
+				default:
+					p.addErr(fmt.Sprintf(`Field must implement interface "%s"`, root.TypeName()))
+				}
+				if !found {
+					p.addErr(fmt.Sprintf(`On condition type for  %q does not implement interface %q, %s`, qry.TypeCond.String(), root.TypeName(), qry.TypeCond.AtPosition()))
+					continue
+				}
+			case *sdl.Object_:
 			}
+			// else {
+			// 	root = qry.TypeCondAST
+			// }
 
 			if len(qry.Directives) > 0 {
 				//
@@ -890,8 +916,8 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 					}
 				}
 			}
-			fmt.Println("InlineFragment: sset , rootPath", qry.SelectionSet, pathRoot)
-			p.checkFields_(fragAST, qry.SelectionSet, pathRoot)
+			fmt.Println("InlineFragment: sset , pathRoot", qry.SelectionSet, pathRoot)
+			p.checkFields_(root, qry.SelectionSet, pathRoot)
 		} // switch
 	}
 	fmt.Println("++++++++++++++++++++++++++++++++++++++++++++ leave  checkFields_ --------------------------------------* ")
@@ -1428,7 +1454,9 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 					// EXECUTE RESOLVER - using current response data (nil for the first time) and any arguments associated with field
 					//
 					rch := qry.Resolver(ctx, resp, qry.Arguments) // qry.Arguments -> sdl.ObjectVals as both share common def []*ArgumentT
+					//
 					// blocking wait
+					//
 					select {
 					case <-ctx.Done():
 						ctxMsg = `Resolver for "%s" timed out and consequently`
@@ -2177,34 +2205,19 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 
 		case *ast.InlineFragment:
 
-			last := func(a string) string {
-				n := strings.Split(a, "/")
-				return n[len(n)-1]
-			}
-			//
-			// type InlineFragement
+			// ... on-Named-Type-opt	Directives-opt	SelectionSet-list
 			//
 			// TypeCond    sdl.Name_ // supplied by typeCondition if specified, otherwise its the type of the parent object's selectionset.
 			// TypeCondAST sdl.GQLTypeProvider
 			// sdl.Directives_
 			// SelectionSet []SelectionSetProvider // { only fields and ... fragments. Nil when no TypeCond and adopts selectionSet of enclosing context.
 			//
-			fmt.Println()
-			fmt.Println(" ... inline fragment   qry.TypeCond.String()		", qry.TypeCond.String())
-			fmt.Println(" ... inline fragment   qry.TypeCondAST.TypeName()	", qry.TypeCondAST.TypeName())
-			fmt.Println(" ... inline fragment   qry.SelectionSet	", qry.SelectionSet)
-			fmt.Println()
-			fmt.Println(" ... func arguments	pathRoot					", pathRoot)
-			fmt.Println(" ... func arguments	gqlsset				", gqlsset)
-
-			// InlineFragment
-			// ...TypeCondition-opt	Directives-opt	SelectionSet-list
+			last := func(a string) string {
+				n := strings.Split(a, "/")
+				return n[len(n)-1]
+			}
 			//
-			var fragAST sdl.GQLTypeProvider
-
-			rootPath := pathRoot
-			//
-			//  existence of type condition determines query type (i.e. the type associated with the query field)
+			//  Type condition should have been populated during parsing for both explicit ad implicit cases
 			//
 			fmt.Println("qry.TypeCond: ", qry.TypeCond)
 			if !qry.TypeCond.Exists() {
@@ -2212,23 +2225,29 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 				p.abort = true
 				return
 			}
-			fragAST = qry.TypeCondAST
-			if fragAST == nil {
+			//
+			// populate type condition's AST if not already assigned
+			//
+			if qry.TypeCondAST == nil {
 				var err error
-				fragAST, err = p.tyCache.FetchAST(qry.TypeCond.Name)
+				qry.TypeCondAST, err = p.tyCache.FetchAST(qry.TypeCond.Name)
 				if err != nil {
 					p.addErr(err.Error())
 					p.abort = true
 					return
 				}
 			}
-			cRoot := last(rootPath)
-			if cRoot != qry.TypeCond.Name.String() {
-				rootPath += "/" + qry.TypeCond.Name.String()
+			//
+			// from the pathRoot get the enclosed type and compare against type condition. If different we have a new type and therefore new pathRoot
+			//
+			curRoot := last(pathRoot)
+			if curRoot != qry.TypeCond.Name.String() {
+				pathRoot += "/" + qry.TypeCond.Name.String()
 			}
-			fmt.Println("xrootPath , fragAST, last(rootPath), responseType = ", rootPath, fragAST.TypeName(), cRoot, responseType)
+			fmt.Println("xpathRoot , qry.TypeCondAST, last(pathRoot), responseType = ", pathRoot, qry.TypeCondAST.TypeName(), curRoot, responseType)
 			//
 			// check response data {reponseType:responseItems} against the field type (determined by type condition for inline frags - see prevous stmt)
+			//
 			respAST, err := p.tyCache.FetchAST(sdl.NameValue_(responseType)) //TODO - eleminate this cache lookup by passing the responseAST rather than reesponseType
 			if err != nil {
 				p.addErr(err.Error())
@@ -2238,40 +2257,42 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 				p.abort = true
 				return
 			}
+			//
 			respObj, ok := respAST.(*sdl.Object_)
 			if !ok {
-				p.addErr(fmt.Sprintf(`Response type "%s" is not a Graphql Object`, responseType))
+				p.addErr(fmt.Sprintf(`Response type "%s" is not a SDL Object`, responseType))
 				p.abort = true
 				return
 			}
-			fmt.Println("respObj: ", respObj.TypeName())
 			//
 			// anaylze directives
 			//
-			var noExecute bool
+			var notInclude bool
 			for _, v := range qry.Directives {
 				switch v.Name_.String() {
 				case "@include":
 					//... @include(if: $expandedInfo) {
 					for _, arg := range v.Arguments {
 						if arg.Name.String() != "if" {
-							p.addErr(fmt.Sprintf(`Expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
+							p.addErr(fmt.Sprintf(`include directive error, expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
 							return
 						}
 						// parse wil have populated argument value with variable value.
 						// TODO - variable value should be sourced during execution not parsing. Fix.
 						argv := arg.Value.InputValueProvider.(sdl.Bool_)
 						if argv == false {
-							fmt.Println("Abandon.......")
-							noExecute = true
+							notInclude = true
 						}
 					}
 				}
 			}
+			if notInclude {
+				continue
+			}
 			//
-			// depending on the inline frag type, verify response object satisfies it. Note it is not an error if response does not match query field type, we merely ignore the field.
-			// //
-			switch rtg := fragAST.(type) {
+			// verify response object satisfies inline type condition. Note it is not an error if response does not match query field type, we merely ignore the field.
+			//
+			switch rtg := qry.TypeCondAST.(type) {
 
 			case *sdl.Interface_:
 				var found bool
@@ -2295,22 +2316,19 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 					}
 				}
 				if !found {
-					p.addErr(fmt.Sprintf(`Response type "%s" does not match any member in the Union type %s`, responseType, fragAST.TypeName()))
+					p.addErr(fmt.Sprintf(`Response type "%s" does not match any member in the Union type %s`, responseType, qry.TypeCondAST.TypeName()))
 					continue
 				}
 				// TODO complete implementation
 
 			default:
-				if responseType != fragAST.TypeName().String() {
-					fmt.Printf(`Response type "%s" does not match Fragment type "%s" %s`, responseType, fragAST.TypeName(), "\n")
+				if responseType != qry.TypeCondAST.TypeName().String() {
+					fmt.Printf(`Response type "%s" does not match Fragment type "%s" %s`, responseType, qry.TypeCondAST.TypeName(), "\n")
 					continue
 				}
 			}
-			if !noExecute {
-				fmt.Println("Just before executestmt: ", fragAST.TypeName(), len(qry.SelectionSet), rootPath, responseType, responseItems)
-				//p.executeStmt_(fragAST, qry.SelectionSet, rootPath, responseType, responseItems, out)
-				p.executeStmt_(qry.SelectionSet, rootPath, responseType, responseItems, out)
-			}
+
+			p.executeStmt_(qry.SelectionSet, pathRoot, responseType, responseItems, out)
 		}
 	}
 }

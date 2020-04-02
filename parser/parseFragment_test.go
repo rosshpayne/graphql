@@ -583,12 +583,14 @@ fragment comparisonFields on Character {
 
 		checkErrors(errs, execErrs, t)
 
-		if compare(result, expectedResult2) {
-			t.Errorf("Got:      [%s] \n", trimWS(result))
-			t.Errorf("Expected: [%s] \n", trimWS(expectedResult2))
-			t.Errorf(`Unexpected: JSON output wrong. `)
+		if len(errs) == 0 {
+			if compare(result, expectedResult2) {
+				t.Errorf("Got:      [%s] \n", trimWS(result))
+				t.Errorf("Expected: [%s] \n", trimWS(expectedResult2))
+				t.Errorf(`Unexpected: JSON output wrong. `)
+			}
+			t.Log(result)
 		}
-		t.Log(result)
 	}
 }
 
@@ -970,7 +972,20 @@ fragment comparisonFields on Character {
 }
 
 func TestMultiStmtDuplicates(t *testing.T) {
-
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		type Query { hero(episode: Episode): [Human]
+					 droid(id: ID!): [Droid]
+					}
+		`
+		setup(inputSDL, t)
+	}
+	//
+	// Test
+	//
 	var input = `
 	query xyz {
 	  leftComparison: hero(episode: NEWHOPE) {
@@ -1038,64 +1053,44 @@ fragment comparisonFields on Character {
 
 `
 
-	var expectedErr [3]string
-	expectedErr[0] = `Duplicate statement name "xyz" at line: 26 column: 8`
-	expectedErr[1] = `Duplicate statement name "xyz2" at line: 38 column: 8`
-	expectedErr[2] = `Duplicate fragment name "comparisonFields" at line: 59 column: 10`
+	var parseErrs []string = []string{
+		`Duplicate statement name "xyz" at line: 26 column: 8`,
+		`Duplicate statement name "xyz2" at line: 38 column: 8`,
+		`Duplicate fragment name "comparisonFields" at line: 59 column: 10`,
+	}
 
 	l := lexer.New(input)
 	p := New(l)
-
-	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
-		p.addErr(err.Error())
-	}
 	//	p.ClearCache()
 	p.SetDocument("DefaultDoc")
-	d, errs := p.ParseDocument()
-	if d != nil {
-		fmt.Println(d.String())
-	}
-	for _, ex := range expectedErr {
-		if len(ex) == 0 {
-			break
-		}
-		found := false
-		for _, err := range errs {
-			if trimWS(err.Error()) == trimWS(ex) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Expected Error = [%q]`, ex)
-		}
-	}
-	for _, got := range errs {
-		found := false
-		for _, exp := range expectedErr {
-			if trimWS(got.Error()) == trimWS(exp) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Unexpected Error = [%q]`, got.Error())
-		}
-	}
+	_, errs := p.ParseDocument()
+	checkErrors(errs, parseErrs, t)
 
 }
 
 func TestMultiStmtNoDups(t *testing.T) {
-
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		type Query { hero(episode: Episode): [Human]
+					 droid(id: ID!): [Droid]
+					}
+		`
+		setup(inputSDL, t)
+	}
 	var input = `
 	query xyz {
 	  leftComparison: hero(episode: NEWHOPE) {
 	    ...comparisonFields
 	  }
 	  middleComparision: hero(episode: JEDI ) {
-	    ...comparisonFields
+	    ...comparisonFields2
 	    appearsIn
 	  }
 	  rightComparison: hero(episode: EMPIRE ) {
-	    ...comparisonFields
+	    ...comparisonFields2
 	  }
 	}
 	query xyz1 {
@@ -1124,7 +1119,7 @@ func TestMultiStmtNoDups(t *testing.T) {
 	}
 	query xyz2 {
 	  leftComparison: hero(episode: NEWHOPE) {
-	    ...comparisonFields
+	    ...comparisonFields2
 	  }
 	  middleComparision: hero(episode: JEDI ) {
 	    ...comparisonFields
@@ -1152,8 +1147,66 @@ fragment comparisonFields2 on Character {
 
 `
 
-	var expectedErr [1]string
-	expectedErr[0] = ``
+	var expectedResult string = `{ data : [ 
+         leftComparison : [ 
+         {
+         name : "Luke Skywalker"
+         friends : [ 
+                 {
+                 name : "Leia Organa"
+                 }
+                 {
+                 name : "C-3PO"
+                 }
+                 {
+                 name : "R2-D2"
+                 } ] 
+         }
+         {
+         name : "Leia Organa"
+         friends : [ 
+                 {
+                 name : "Luke Skywalker"
+                 }
+                 {
+                 name : "C-3PO"
+                 }
+                 {
+                 name : "R2-D2"
+                 } ] 
+         }  ]
+         middleComparision : [ 
+         {
+         name : "Luke Skywalker"
+         friends : [ 
+                 {
+                 name : "Leia Organa"
+                 }
+                 {
+                 name : "C-3PO"
+                 }
+                 {
+                 name : "R2-D2"
+                 } ] 
+         appearsIn : [  NEWHOPE JEDI ] 
+         }  ]
+         rightComparison : [ 
+         {
+         name : "Leia Organa"
+         friends : [ 
+                 {
+                 name : "Luke Skywalker"
+                 }
+                 {
+                 name : "C-3PO"
+                 }
+                 {
+                 name : "R2-D2"
+                 } ] 
+         }  ] 
+         ] }`
+	var parseErrs []string
+	var execErrs []string
 
 	l := lexer.New(input)
 	p := New(l)
@@ -1161,43 +1214,170 @@ fragment comparisonFields2 on Character {
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
 	}
-	//	p.ClearCache()
 	p.SetDocument("DefaultDoc")
-	p.SetExecStmt("xyz2")
 	d, errs := p.ParseDocument()
-	if d != nil {
-		fmt.Println(d.String())
-	}
-	for _, ex := range expectedErr {
-		if len(ex) == 0 {
-			break
-		}
-		found := false
-		for _, err := range errs {
-			if trimWS(err.Error()) == trimWS(ex) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Expected Error = [%q]`, ex)
-		}
-	}
-	for _, got := range errs {
-		found := false
-		for _, exp := range expectedErr {
-			if trimWS(got.Error()) == trimWS(exp) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Unexpected Error = [%q]`, got.Error())
-		}
-	}
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		t.Log(d.String())
+		p.SetExecStmt("xyz2")
 
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, execErrs, t)
+
+		if len(errs) == 0 {
+			if compare(result, expectedResult) {
+				t.Errorf("Got:      [%s] \n", trimWS(result))
+				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+				t.Errorf(`Unexpected: JSON output wrong. `)
+			}
+			t.Log(result)
+		}
+	}
 }
 
-func TestFragmentNested(t *testing.T) {
+func TestFragmentNestedx(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		type Query { hero(episode: Episode):[Human]
+					 droid(id: ID!): [Droid]
+					}
+		`
+		setup(inputSDL, t)
+	}
+	var input = `query {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFields
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFields
+	  }
+	}
 
+fragment nestedField2 on Character {
+	name
+}
+fragment nestedField1 on Character {
+	appearsIn
+}
+fragment comparisonFields on Character {
+  ...nestedField1
+  friends {
+    name
+  }
+  ...nestedField2
+}
+`
+
+	var parseErrs []string
+	var execErrs []string
+	var expectedResult string = ` { data : [ 
+         leftComparison : [ 
+         {
+         appearsIn : [  NEWHOPE JEDI ] 
+         friends : [ 
+                 {
+                 name : "Leia Organa"
+                 }
+                 {
+                 name : "C-3PO"
+                 }
+                 {
+                 name : "R2-D2"
+                 } ] 
+         name : "Luke Skywalker"
+         }
+         {
+         appearsIn : [  NEWHOPE EMPIRE ] 
+         friends : [ 
+                 {
+                 name : "Luke Skywalker"
+                 }
+                 {
+                 name : "C-3PO"
+                 }
+                 {
+                 name : "R2-D2"
+                 } ] 
+         name : "Leia Organa"
+         }  ]
+         middleComparision : [ 
+         {
+         appearsIn : [  NEWHOPE JEDI ] 
+         friends : [ 
+                 {
+                 name : "Leia Organa"
+                 }
+                 {
+                 name : "C-3PO"
+                 }
+                 {
+                 name : "R2-D2"
+                 } ] 
+         name : "Luke Skywalker"
+         }  ]
+         rightComparison : [ 
+         {
+         appearsIn : [  NEWHOPE EMPIRE ] 
+         friends : [ 
+                 {
+                 name : "Luke Skywalker"
+                 }
+                 {
+                 name : "C-3PO"
+                 }
+                 {
+                 name : "R2-D2"
+                 } ] 
+         name : "Leia Organa"
+         }  ] 
+         ] }`
+
+	l := lexer.New(input)
+	p := New(l)
+
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
+		p.addErr(err.Error())
+	}
+	p.SetDocument("DefaultDoc")
+	d, errs := p.ParseDocument()
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		t.Log(d.String())
+
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, execErrs, t)
+
+		if len(errs) == 0 {
+			if compare(result, expectedResult) {
+				t.Errorf("Got:      [%s] \n", trimWS(result))
+				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+				t.Errorf(`Unexpected: JSON output wrong. `)
+			}
+			t.Log(result)
+		}
+	}
+}
+
+func TestFragmentNestedWithDupField(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		type Query { hero(episode: Episode):[Human]
+					 droid(id: ID!): [Droid]
+					}
+		`
+		setup(inputSDL, t)
+	}
 	var input = `query {
 	  leftComparison: hero(episode: NEWHOPE) {
 	    ...comparisonFields
@@ -1225,8 +1405,12 @@ fragment comparisonFields on Character {
   ...nestedField2
 }
 `
-	var expectedErr [1]string
-	expectedErr[0] = ``
+
+	var parseErrs []string = []string{
+		`Field "Human.Query/hero(middleComparision)/appearsIn" has already been specified at line: 7 column: 6`,
+	}
+	var execErrs []string
+	var expectedResult string
 
 	l := lexer.New(input)
 	p := New(l)
@@ -1234,45 +1418,118 @@ fragment comparisonFields on Character {
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
 	}
-	//	p.ClearCache()
 	p.SetDocument("DefaultDoc")
-	p.SetExecStmt("xyz2")
 	d, errs := p.ParseDocument()
-	if d != nil {
-		fmt.Println(d.String())
-	}
-	for _, ex := range expectedErr {
-		if len(ex) == 0 {
-			break
-		}
-		found := false
-		for _, err := range errs {
-			if trimWS(err.Error()) == trimWS(ex) {
-				found = true
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		t.Log(d.String())
+
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, execErrs, t)
+
+		if len(errs) == 0 {
+			if compare(result, expectedResult) {
+				t.Errorf("Got:      [%s] \n", trimWS(result))
+				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+				t.Errorf(`Unexpected: JSON output wrong. `)
 			}
-		}
-		if !found {
-			t.Errorf(`Expected Error = [%q]`, ex)
-		}
-	}
-	for _, got := range errs {
-		found := false
-		for _, exp := range expectedErr {
-			if trimWS(got.Error()) == trimWS(exp) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Unexpected Error = [%q]`, got.Error())
+			t.Log(result)
 		}
 	}
 }
 
-func TestFragmentTypeCond1(t *testing.T) {
+func TestFragmentNestedWrongFrag(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		type Query { hero(episode: Episode): [Human]
+					 droid(id: ID!): [Droid]
+					}
+		`
+		setup(inputSDL, t)
+	}
+	var input = `query {
+	  leftComparison: hero(episode: NEWHOPE) {
+	    ...comparisonFields
+	  }
+	  middleComparision: hero(episode: JEDI ) {
+	    ...comparisonFieldx1
+	  }
+	  rightComparison: hero(episode: EMPIRE ) {
+	    ...comparisonFieldx2
+	  }
+	}
+
+fragment nestedField2 on Character {
+	name
+}
+fragment nestedField1 on Character {
+	appearsIn
+}
+fragment comparisonFields on Character {
+  ...nestedField1
+  friends {
+    name
+  }
+  ...nestedField2
+}
+`
+
+	var parseErrs []string = []string{
+		`Associated Fragment definition "comparisonFieldx1" not found at line: 6 column: 9`,
+		`Associated Fragment definition "comparisonFieldx2" not found at line: 9 column: 9`,
+	}
+	var execErrs []string
+	var expectedResult string
+
+	l := lexer.New(input)
+	p := New(l)
+
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
+		p.addErr(err.Error())
+	}
+	p.SetDocument("DefaultDoc")
+	d, errs := p.ParseDocument()
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		t.Log(d.String())
+
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, execErrs, t)
+
+		if len(errs) == 0 {
+			if compare(result, expectedResult) {
+				t.Errorf("Got:      [%s] \n", trimWS(result))
+				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+				t.Errorf(`Unexpected: JSON output wrong. `)
+			}
+			t.Log(result)
+		}
+	}
+}
+
+func TestFragmentTypeCond1x(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		type Query { hero(episode: Episode): [Human]
+					 droid(id: Int!): [Droid]
+					}
+		`
+		setup(inputSDL, t)
+	}
 
 	var input = `query ($expandedInfo: Boolean = true) {
-	leftComparison: hero(episode: DRTYPE) {
+	leftComparison: hero(episode: EMPIRE) {
 	   ...comparisonHuman
+	}
+	rightComparison: droid(id: 1) {
 	   ...comparisonDroid
 	}
 	}
@@ -1297,64 +1554,182 @@ fragment comparisonCharacter on Character {
 }
 `
 
-	var expectedErr [1]string
-	expectedErr[0] = ``
+	var parseErrs []string
+	var execErrs []string
+	var expectedResult string = ` { data : [ 
+         leftComparison : [ 
+         {
+         name : "Leia Organa"
+         friends : [ 
+                 {
+                 friendsName : "Luke Skywalker"
+                 }
+                 {
+                 friendsName : "C-3PO"
+                 }
+                 {
+                 friendsName : "R2-D2"
+                 } ] 
+         appearsIn : [  NEWHOPE EMPIRE ] 
+         totalCredits : 2532
+         }  ]
+         rightComparison : [ 
+         {
+         name : "Dro-RK9"
+         friends : [ 
+                 {
+                 friendsName : "Leia Organa"
+                 }
+                 {
+                 friendsName : "C-3PO"
+                 }
+                 {
+                 friendsName : "R2-D2"
+                 } ] 
+         appearsIn : [  DRTYPE ] 
+         primaryFunction : "Diplomat"
+         }
+         {
+         name : "Dro-P78"
+         friends : [ 
+                 {
+                 friendsName : "R2-D2"
+                 }
+                 {
+                 friendsName : "C-3PO"
+                 } ] 
+         appearsIn : [  DRTYPE ] 
+         primaryFunction : "Multifunction"
+         }  ] 
+         ] } `
 
 	l := lexer.New(input)
 	p := New(l)
 
-	if err := p.Resolver.Register("Query/hero", client.ResolverHero2); err != nil {
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
 	}
-	//	p.ClearCache()
+	if err := p.Resolver.Register("Query/droid", client.ResolverDroid); err != nil {
+		p.addErr(err.Error())
+	}
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
-	if d != nil {
-		fmt.Println(d.String())
-	}
-	for _, ex := range expectedErr {
-		if len(ex) == 0 {
-			break
-		}
-		found := false
-		for _, err := range errs {
-			if trimWS(err.Error()) == trimWS(ex) {
-				found = true
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		t.Log(d.String())
+
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, execErrs, t)
+
+		if len(errs) == 0 {
+			if compare(result, expectedResult) {
+				t.Errorf("Got:      [%s] \n", trimWS(result))
+				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+				t.Errorf(`Unexpected: JSON output wrong. `)
 			}
-		}
-		if !found {
-			t.Errorf(`Expected Error = [%q]`, ex)
+			t.Log(result)
 		}
 	}
-	for _, got := range errs {
-		found := false
-		for _, exp := range expectedErr {
-			if trimWS(got.Error()) == trimWS(exp) {
-				found = true
+}
+
+func TestFragmentTypeCond1withErrs(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		type Query { hero(episode: Episode): [Human]
+					 droid(id: ID!): [Droid]
+					}
+		`
+		setup(inputSDL, t)
+	}
+
+	var input = `query ($expandedInfo: Boolean = true) {
+	leftComparison: hero(episode: DRTYPE) {
+	   ...comparisonHuman
+	   ...comparisonDroid
+	   appearsIn
+	}
+	}
+	
+fragment comparisonHuman on Human {							
+  ...comparisonCharacter
+   totalCredits
+}
+
+fragment comparisonDroid on Droid {						
+  ...comparisonCharacter
+  primaryFunction
+}
+
+fragment comparisonCharacter on Character {
+  name
+  friends {
+  	friendsName: name
+  }
+  appearsIn
+}
+`
+
+	var parseErrs []string = []string{
+		`"DRTYPE" is not a member of Enum type Episode at line: 2 column: 32`,
+		`Field "Human.Query/hero(leftComparison)/name" has already been specified at line: 20 column: 3`,
+		`Field "Character.Query/hero(leftComparison)/friends/name(friendsName)" has already been specified at line: 22 column: 17`,
+		`Field "Human.Query/hero(leftComparison)/appearsIn" has already been specified at line: 24 column: 3`,
+		`Field "primaryFunction" is not a member of "hero(leftComparison)" (SDL Object "Human") at line: 16 column: 3`,
+		`Field "Human.Query/hero(leftComparison)/appearsIn" has already been specified at line: 5 column: 5`,
+	}
+	var execErrs []string
+	var expectedResult string
+
+	l := lexer.New(input)
+	p := New(l)
+
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
+		p.addErr(err.Error())
+	}
+	p.SetDocument("DefaultDoc")
+	d, errs := p.ParseDocument()
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		t.Log(d.String())
+
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, execErrs, t)
+
+		if len(errs) == 0 {
+			if compare(result, expectedResult) {
+				t.Errorf("Got:      [%s] \n", trimWS(result))
+				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+				t.Errorf(`Unexpected: JSON output wrong. `)
 			}
+			t.Log(result)
 		}
-		if !found {
-			t.Errorf(`Unexpected Error = [%q]`, got.Error())
-		}
-	}
-	if d != nil {
-		if compare(d.String(), input) {
-			t.Errorf("Got:      [%s] \n", trimWS(d.String()))
-			t.Errorf("Expected: [%s] \n", trimWS(input))
-			t.Errorf(`Unexpected: program.String() wrong. `)
-		}
-	} else {
-		t.Errorf("Error in creating statement")
 	}
 }
 
 func TestFragmentTypeCond2(t *testing.T) {
-
-	var input = `query ($expandedInfo: Boolean = true) {
-	leftComparison: hero(episode: JEDI) {
-	   ...comparisonHuman
-	   ...comparisonDroid
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		type Query { hero(episode: Episode): [Human]
+					 droid(id: Int!): [Droid]
+					}
+		`
+		setup(inputSDL, t)
 	}
+	var input = `query ($expandedInfo: Boolean = true) {
+	HumanComparison: hero(episode: JEDI) {
+	   ...comparisonHuman
+	}
+	DroidComparison: droid(id : 1) {
+	   ...comparisonDroid
+	}	
 	}
 
 
@@ -1377,8 +1752,54 @@ fragment comparisonCharacter on Character {
 }
 `
 
-	var expectedErr [1]string
-	expectedErr[0] = ``
+	var parseErrs []string
+	var execErrs []string
+	var expectedResult string = `{ data : [ 
+         HumanComparison : [ 
+         {
+         name : "Luke Skywalker"
+         friends : [ 
+                 {
+                 friendsName : "Leia Organa"
+                 }
+                 {
+                 friendsName : "C-3PO"
+                 }
+                 {
+                 friendsName : "R2-D2"
+                 } ] 
+         appearsIn : [  NEWHOPE JEDI ] 
+         totalCredits : 5532
+         }  ]
+         DroidComparison : [ 
+         {
+         name : "Dro-RK9"
+         friends : [ 
+                 {
+                 friendsName : "Leia Organa"
+                 }
+                 {
+                 friendsName : "C-3PO"
+                 }
+                 {
+                 friendsName : "R2-D2"
+                 } ] 
+         appearsIn : [  DRTYPE ] 
+         primaryFunction : "Diplomat"
+         }
+         {
+         name : "Dro-P78"
+         friends : [ 
+                 {
+                 friendsName : "R2-D2"
+                 }
+                 {
+                 friendsName : "C-3PO"
+                 } ] 
+         appearsIn : [  DRTYPE ] 
+         primaryFunction : "Multifunction"
+         }  ] 
+         ] } `
 
 	l := lexer.New(input)
 	p := New(l)
@@ -1386,52 +1807,51 @@ fragment comparisonCharacter on Character {
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
 	}
-	//	p.ClearCache()
+	if err := p.Resolver.Register("Query/droid", client.ResolverDroid); err != nil {
+		p.addErr(err.Error())
+	}
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
-	if d != nil {
-		fmt.Println(d.String())
-	}
-	for _, ex := range expectedErr {
-		if len(ex) == 0 {
-			break
-		}
-		found := false
-		for _, err := range errs {
-			if trimWS(err.Error()) == trimWS(ex) {
-				found = true
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		t.Log(d.String())
+
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, execErrs, t)
+
+		if len(errs) == 0 {
+			if compare(result, expectedResult) {
+				t.Errorf("Got:      [%s] \n", trimWS(result))
+				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+				t.Errorf(`Unexpected: JSON output wrong. `)
 			}
+			t.Log(result)
 		}
-		if !found {
-			t.Errorf(`Expected Error = [%q]`, ex)
-		}
-	}
-	for _, got := range errs {
-		found := false
-		for _, exp := range expectedErr {
-			if trimWS(got.Error()) == trimWS(exp) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Unexpected Error = [%q]`, got.Error())
-		}
-	}
-	if d != nil {
-		if compare(d.String(), input) {
-			t.Errorf("Got:      [%s] \n", trimWS(d.String()))
-			t.Errorf("Expected: [%s] \n", trimWS(input))
-			t.Errorf(`Unexpected: program.String() wrong. `)
-		}
-	} else {
-		t.Errorf("Error in creating statement")
 	}
 }
 
 func TestInlineFragmentTypeCondInterface(t *testing.T) {
-
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		type Query { hero(episode: Episode): [Character]
+					 droid(id: Int!): [Character]
+					}
+		type Droid {
+							id: ID!
+							name: String!
+							friends: [Character]
+							appearsIn: [Episode]!
+							primaryFunction: String
+							}
+		`
+		setup(inputSDL, t)
+	}
 	var input = `query ($expandedInfo: Boolean = true) {
-	leftComparison: hero(episode: DRTYPE) {
+	leftComparison: hero(episode: EMPIRE) {
 	   ...on Human { 
 					name
 					 friends {
@@ -1440,6 +1860,8 @@ func TestInlineFragmentTypeCondInterface(t *testing.T) {
 					appearsIn
 					totalCredits
 					}
+	}
+		rightComparison: droid(id: 1) {
 	   ...on Droid {
 					name
 					 friends {
@@ -1452,55 +1874,53 @@ func TestInlineFragmentTypeCondInterface(t *testing.T) {
 	}
 `
 
-	var expectedErr [1]string
-	expectedErr[0] = ``
-
+	var parseErrs []string = []string{
+		`Field "totalCredits" is not a member of "hero(leftComparison)" (SDL Interface "Character") at line: 9 column: 6`,
+		`On condition type for  "Droid" does not implement interface "Character", at line: 13 column: 11`,
+	}
+	var execErrs []string
+	var expectedResult string
 	l := lexer.New(input)
 	p := New(l)
 
-	if err := p.Resolver.Register("Query/hero", client.ResolverHero2); err != nil {
+	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
 	}
-	//	p.ClearCache()
+	if err := p.Resolver.Register("Query/droid", client.ResolverDroid); err != nil {
+		p.addErr(err.Error())
+	}
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
-	if d != nil {
-		fmt.Println(d.String())
-	}
-	for _, ex := range expectedErr {
-		if len(ex) == 0 {
-			break
-		}
-		found := false
-		for _, err := range errs {
-			if trimWS(err.Error()) == trimWS(ex) {
-				found = true
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		t.Log(d.String())
+
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, execErrs, t)
+
+		if len(errs) == 0 {
+			if compare(result, expectedResult) {
+				t.Errorf("Got:      [%s] \n", trimWS(result))
+				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+				t.Errorf(`Unexpected: JSON output wrong. `)
 			}
-		}
-		if !found {
-			t.Errorf(`Expected Error = [%q]`, ex)
+			t.Log(result)
 		}
 	}
-	for _, got := range errs {
-		found := false
-		for _, exp := range expectedErr {
-			if trimWS(got.Error()) == trimWS(exp) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Unexpected Error = [%q]`, got.Error())
-		}
-	}
-	if d != nil {
-		if compare(d.String(), input) {
-			t.Errorf("Got:      [%s] \n", trimWS(d.String()))
-			t.Errorf("Expected: [%s] \n", trimWS(input))
-			t.Errorf(`Unexpected: program.String() wrong. `)
-		}
-	} else {
-		t.Errorf("Error in creating statement")
-	}
+	//
+	// teardown
+	//
+	inputSDL := `
+		type Droid implements Character  {
+							id: ID!
+							name: String!
+							friends: [Character]
+							appearsIn: [Episode]!
+							primaryFunction: String
+							}
+		`
+	teardown(inputSDL, t)
 }
 
 func TestInlineFragmentDirectives(t *testing.T) {
