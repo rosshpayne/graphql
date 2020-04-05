@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/graphql/client"
@@ -326,9 +325,8 @@ func TestFragmentResolveRetList(t *testing.T) {
 	//	p.ClearCache()
 	p.SetDocument("DefaultDoc")
 
-	d, errs := p.ParseDocument()
+	_, errs := p.ParseDocument()
 	checkErrors(errs, parseErrs, t)
-	t.Log(d.String())
 	if len(errs) == 0 {
 
 		result, errs := p.ExecuteDocument()
@@ -1876,7 +1874,7 @@ func TestInlineFragmentTypeCondInterface(t *testing.T) {
 
 	var parseErrs []string = []string{
 		`Field "totalCredits" is not a member of "hero(leftComparison)" (SDL Interface "Character") at line: 9 column: 6`,
-		`On condition type for  "Droid" does not implement interface "Character", at line: 13 column: 11`,
+		`On condition type for  "Droid" does not implement interface "Character", at line: 13 column: 7`,
 	}
 	var execErrs []string
 	var expectedResult string
@@ -1971,7 +1969,6 @@ func TestInlineFragmentDirectives(t *testing.T) {
 	   ...@include (if: $expandedInfo) {				# inlinefragment (ie. no fragment name) with directive
 	    	...comparisonFields
 	   }
-	   	appearsIn
 	  }
 	  rightComparison: hero(episode: EMPIRE ) {
 	    ...comparisonFields @include(if: $expandedInfo) # fragment spread with directive (can be different to directives in fragment statement)
@@ -1990,7 +1987,6 @@ fragment comparisonFields on Character {				# fragment stmt no directives
 `
 
 	var expectedErr []string
-
 	var expectedResult string = `{ data : [ 
          leftComparison : [ 
          {
@@ -2035,7 +2031,6 @@ fragment comparisonFields on Character {				# fragment stmt no directives
                          name : "R2-D2"
                          } ] 
                  appearsIn : [  NEWHOPE JEDI ] 
-         appearsIn : [  NEWHOPE JEDI ] 
          }
          {
                  name : "Leia Organa"
@@ -2050,7 +2045,6 @@ fragment comparisonFields on Character {				# fragment stmt no directives
                          name : "R2-D2"
                          } ] 
                  appearsIn : [  NEWHOPE EMPIRE ] 
-         appearsIn : [  NEWHOPE EMPIRE ] 
          }  ]
          rightComparison : [ 
          {
@@ -2068,7 +2062,85 @@ fragment comparisonFields on Character {				# fragment stmt no directives
          appearsIn : [  NEWHOPE EMPIRE ] 
          MyName : "Leia Organa"
          }  ] 
-         ] } `
+         ] }`
+	// var expectedResult string = `{ data : [
+	//        leftComparison : [
+	//        {
+	//        name : "Luke Skywalker"
+	//        friends : [
+	//                {
+	//                name : "Leia Organa"
+	//                }
+	//                {
+	//                name : "C-3PO"
+	//                }
+	//                {
+	//                name : "R2-D2"
+	//                } ]
+	//        appearsIn : [  NEWHOPE JEDI ]
+	//        }
+	//        {
+	//        name : "Leia Organa"
+	//        friends : [
+	//                {
+	//                name : "Luke Skywalker"
+	//                }
+	//                {
+	//                name : "C-3PO"
+	//                }
+	//                {
+	//                name : "R2-D2"
+	//                } ]
+	//        appearsIn : [  NEWHOPE EMPIRE ]
+	//        }  ]
+	//        middleComparision : [
+	//        {
+	//                name : "Luke Skywalker"
+	//                friends : [
+	//                        {
+	//                        name : "Leia Organa"
+	//                        }
+	//                        {
+	//                        name : "C-3PO"
+	//                        }
+	//                        {
+	//                        name : "R2-D2"
+	//                        } ]
+	//                appearsIn : [  NEWHOPE JEDI ]
+	//        appearsIn : [  NEWHOPE JEDI ]
+	//        }
+	//        {
+	//                name : "Leia Organa"
+	//                friends : [
+	//                        {
+	//                        name : "Luke Skywalker"
+	//                        }
+	//                        {
+	//                        name : "C-3PO"
+	//                        }
+	//                        {
+	//                        name : "R2-D2"
+	//                        } ]
+	//                appearsIn : [  NEWHOPE EMPIRE ]
+	//        appearsIn : [  NEWHOPE EMPIRE ]
+	//        }  ]
+	//        rightComparison : [
+	//        {
+	//        name : "Leia Organa"
+	//        friends : [
+	//                {
+	//                name : "Luke Skywalker"
+	//                }
+	//                {
+	//                name : "C-3PO"
+	//                }
+	//                {
+	//                name : "R2-D2"
+	//                } ]
+	//        appearsIn : [  NEWHOPE EMPIRE ]
+	//        MyName : "Leia Organa"
+	//        }  ]
+	//        ] } `
 
 	l := lexer.New(input)
 	p := New(l)
@@ -2117,8 +2189,9 @@ fragment comparisonFields on Character {
 
 `
 
-	var expectedErr [1]string
-	expectedErr[0] = ``
+	var parsedErrs []string
+	var execErrs []string
+	var expectedResult string
 
 	l := lexer.New(input)
 	p := New(l)
@@ -2126,39 +2199,25 @@ fragment comparisonFields on Character {
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
 	}
-	//	p.ClearCache()
 	p.SetDocument("DefaultDoc")
-	d, errs := p.ParseDocument()
-	fmt.Println(d.String())
-	for _, ex := range expectedErr {
-		if len(ex) == 0 {
-			break
+	_, errs := p.ParseDocument()
+
+	checkErrors(errs, parsedErrs, t)
+
+	if len(errs) == 0 {
+		if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
+			p.addErr(err.Error())
 		}
-		found := false
-		for _, err := range errs {
-			if trimWS(err.Error()) == trimWS(ex) {
-				found = true
-			}
+
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, execErrs, t)
+		if compare(result, expectedResult) {
+			t.Errorf("Got:      [%s] \n", trimWS(result))
+			t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+			t.Errorf(`Unexpected: JSON output wrong. `)
 		}
-		if !found {
-			t.Errorf(`Expected Error = [%q]`, ex)
-		}
-	}
-	for _, got := range errs {
-		found := false
-		for _, exp := range expectedErr {
-			if trimWS(got.Error()) == trimWS(exp) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Unexpected Error = [%q]`, got.Error())
-		}
-	}
-	if compare(d.String(), input) {
-		t.Errorf("Got:      [%s] \n", trimWS(d.String()))
-		t.Errorf("Expected: [%s] \n", trimWS(input))
-		t.Errorf(`Unexpected: program.String() wrong. `)
+		t.Log(result)
 	}
 }
 
@@ -2184,7 +2243,7 @@ fragment comparisonFields on Character {
 `
 
 	var expectedErr [1]string
-	expectedErr[0] = `Associated Fragment definition "comparisonFields2" not found in document at line: 6 column: 9`
+	expectedErr[0] = `Associated Fragment definition "comparisonFields2" not found at line: 6 column: 9`
 
 	l := lexer.New(input)
 	p := New(l)
@@ -2223,6 +2282,16 @@ fragment comparisonFields on Character {
 }
 
 func TestFragmentFieldErr(t *testing.T) {
+	//
+	// Setup
+	//
+	{
+		inputSDL := `
+		type Query { hero(episode: Episode):  [Character] # TODO: create test for Character (no List)
+					 droid(id: ID!): [Character] 
+					}`
+		setup(inputSDL, t)
+	}
 
 	var input = `query {
   leftComparison: hero(episode: EMPIRE) {
@@ -2246,10 +2315,10 @@ fragment comparisonFields on Character {
 
 `
 
-	var expectedErr [2]string
-	expectedErr[0] = `Field "CTX" is not in Interface "Character" at line: 12 column: 3`
-	expectedErr[1] = `Field "cars" is not in Interface "Character" at line: 16 column: 5`
-
+	var expectedErr []string = []string{
+		`Field "CTX" is not a member of "Character" (SDL Interface "Character") at line: 12 column: 3`,
+		`Field "cars" is not a member of "friends" (SDL Interface "Character") at line: 16 column: 5`,
+	}
 	l := lexer.New(input)
 	p := New(l)
 
@@ -2286,71 +2355,149 @@ fragment comparisonFields on Character {
 	}
 }
 
-func TestUnionType(t *testing.T) {
+func TestUnionTypeWithFieldErr(t *testing.T) {
+	//
+	// Setup
+	//
+	{
+		inputSDL := `
+		schema {
+				query : SearchQuery 
+				mutation : Mutation
+				subscription : Subscription
+				}
+		
+		type SearchQuery {firstSearchResult : SearchResult}
+		
+		union SearchResult =| Photo| Person 
+		
+		type Person {name : String! age  (  ScaleBy : Float   ) : Int! }`
 
+		setup(inputSDL, t)
+	}
+	//
+	// Test
+	//
 	var input = `query {
-  hero (episode: JEDII) {
    firstSearchResult {
+   name
     ... on Person {    
-    name
-    age
+			 name
+			 age
     }
     ... on Photo {
           width
           height
 	}
-   }	
-  }
+}
 }
 `
 
-	var expectedErr [1]string
-	expectedErr[0] = ``
+	var parsedErrs []string = []string{
+		`As the enclosing type is a Union, expected a fragment with explicit type condition, got a non-fragment instead for field "name" at line: 3 column: 4`,
+	}
+	var execErrs []string
+	var expectedResult string = `        {
+        data: {
+         firstSearchResult : {
+                 name : "Ross Payne"
+                 age : 61 }
+        }
+        }`
 
 	l := lexer.New(input)
 	p := New(l)
 
-	if err := p.Resolver.Register("Query/hero", client.ResolverHeroUnion); err != nil {
+	if err := p.Resolver.Register("SearchQuery/firstSearchResult", client.ResolverHeroUnion); err != nil {
 		p.addErr(err.Error())
 	}
-	//	p.ClearCache()
 	p.SetDocument("DefaultDoc")
-	d, errs := p.ParseDocument()
-	if d != nil {
-		fmt.Println(d.String())
+	_, errs := p.ParseDocument()
+
+	checkErrors(errs, parsedErrs, t)
+
+	if len(errs) == 0 {
+
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, execErrs, t)
+		if compare(result, expectedResult) {
+			t.Errorf("Got:      [%s] \n", trimWS(result))
+			t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+			t.Errorf(`Unexpected: JSON output wrong. `)
+		}
+		t.Log(result)
 	}
-	for _, ex := range expectedErr {
-		if len(ex) == 0 {
-			break
-		}
-		found := false
-		for _, err := range errs {
-			if trimWS(err.Error()) == trimWS(ex) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Expected Error = [%q]`, ex)
-		}
+}
+
+func TestUnionType(t *testing.T) {
+	//
+	// Setup
+	//
+	{
+		inputSDL := `
+		schema {
+				query : SearchQuery 
+				mutation : Mutation
+				subscription : Subscription
+				}
+		
+		type SearchQuery {firstSearchResult : SearchResult}
+		
+		union SearchResult =| Photo| Person 
+		
+		type Person {name : String! age  (  ScaleBy : Float   ) : Int! }`
+
+		setup(inputSDL, t)
 	}
-	for _, got := range errs {
-		found := false
-		for _, exp := range expectedErr {
-			if trimWS(got.Error()) == trimWS(exp) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Unexpected Error = [%q]`, got.Error())
-		}
+	//
+	// Test
+	//
+	var input = `query {
+   firstSearchResult {
+    ... on Person {    
+			 name
+			 age
+    }
+    ... on Photo {
+          width
+          height
 	}
-	if d != nil {
-		if compare(d.String(), input) {
-			t.Errorf("Got:      [%s] \n", trimWS(d.String()))
-			t.Errorf("Expected: [%s] \n", trimWS(input))
-			t.Errorf(`Unexpected: program.String() wrong. `)
+}
+}
+`
+
+	var parsedErrs []string
+	var execErrs []string
+	var expectedResult string = `        {
+        data: {
+         firstSearchResult : {
+                 name : "Ross Payne"
+                 age : 61 }
+        }
+        }`
+
+	l := lexer.New(input)
+	p := New(l)
+
+	if err := p.Resolver.Register("SearchQuery/firstSearchResult", client.ResolverHeroUnion); err != nil {
+		p.addErr(err.Error())
+	}
+	p.SetDocument("DefaultDoc")
+	_, errs := p.ParseDocument()
+
+	checkErrors(errs, parsedErrs, t)
+
+	if len(errs) == 0 {
+
+		result, errs := p.ExecuteDocument()
+
+		checkErrors(errs, execErrs, t)
+		if compare(result, expectedResult) {
+			t.Errorf("Got:      [%s] \n", trimWS(result))
+			t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
+			t.Errorf(`Unexpected: JSON output wrong. `)
 		}
-	} else {
-		t.Errorf("Error in creating statement")
+		t.Log(result)
 	}
 }

@@ -63,8 +63,7 @@ func (l *Lexer) NextToken() *token.Token {
 			if l.peekRune() == '.' {
 				//ch := l.ch
 				l.readRune()
-				literal := token.EXPAND
-				tok = &token.Token{Type: token.EXPAND, Literal: literal}
+				tok = l.newToken(token.EXPAND, l.ch) //&token.Token{Type: token.EXPAND, Literal: literal}
 			} else {
 				tok = l.newToken(token.ILLEGAL, l.ch)
 			}
@@ -310,6 +309,7 @@ func (l *Lexer) newToken(tokenType token.TokenType, ch rune, Loc ...token.Pos) *
 	y.Illegal = false
 	if len(Loc) > 0 {
 		y.Loc = Loc[0]
+		//	y.Loc = token.Pos{l.Line, l.Col}
 	} else {
 		y.Loc = token.Pos{l.Line, l.Col}
 	}

@@ -757,58 +757,58 @@ var ResolverDroid = func(ctx context.Context, resp sdl.InputValueProvider, args 
 
 var ResolverHeroUnion = func(ctx context.Context, resp sdl.InputValueProvider, args sdl.ObjectVals) <-chan string {
 	var (
-		episode string
-		index   int
-		s       strings.Builder
+		//		episode string
+		//		index   int
+		s strings.Builder
 	)
 
 	f := func() string {
-		for _, v := range args {
+		// for _, v := range args {
 
-			if v.Name_.EqualString("episode") {
-				if x, ok := v.Value.InputValueProvider.(*sdl.EnumValue_); ok {
-					episode = x.String()
-				}
-			}
-		}
-		for i, v := range episodes {
-			if strings.ToUpper(episode) == string(v) {
-				index = i
-			}
-		}
-		//	s.WriteString("[" + fmt.Sprintf("%d", index) + " " + episode)
+		// 	if v.Name_.EqualString("episode") {
+		// 		if x, ok := v.Value.InputValueProvider.(*sdl.EnumValue_); ok {
+		// 			episode = x.String()
+		// 		}
+		// 	}
+		// }
+		// for i, v := range episodes {
+		// 	if strings.ToUpper(episode) == string(v) {
+		// 		index = i
+		// 	}
+		// }
+		// //	s.WriteString("[" + fmt.Sprintf("%d", index) + " " + episode)
 
-		//s.WriteString("{Droid:  [")
-		if episode == "EMPIRE" {
-			s.WriteString(fmt.Sprintf(`{firstSearchResult : { Person:  {name: %q age: %d} }}`, "Ross Payne", 61))
-			for _, v := range droid {
-				var found bool
-				for _, k := range v.appearsIn {
-					if k == index {
-						found = true
-					}
-				}
-				if found {
-					s.WriteString(v.String())
-					s.WriteString(",")
-				}
-			}
+		// //s.WriteString("{Droid:  [")
+		//if episode == "EMPIRE" {
+		s.WriteString(fmt.Sprintf(`{Person:  {name: %q age: %d} }`, "Ross Payne", 61))
+		// for _, v := range droid {
+		// 	var found bool
+		// 	for _, k := range v.appearsIn {
+		// 		if k == index {
+		// 			found = true
+		// 		}
+		// 	}
+		// 	if found {
+		// 		s.WriteString(v.String())
+		// 		s.WriteString(",")
+		// 	}
+		// }
 
-		} else {
-			s.WriteString(fmt.Sprintf(`{firstSearchResult : {Photo:  { height: %d width: %d}} }`, 600, 480))
-			for _, v := range humans {
-				var found bool
-				for _, k := range v.appearsIn {
-					if k == index {
-						found = true
-					}
-				}
-				if found {
-					s.WriteString(v.String())
-					s.WriteString(",")
-				}
-			}
-		}
+		// } else {
+		// 	s.WriteString(fmt.Sprintf(`{firstSearchResult : {Photo:  { height: %d width: %d}} }`, 600, 480))
+		// 	for _, v := range humans {
+		// 		var found bool
+		// 		for _, k := range v.appearsIn {
+		// 			if k == index {
+		// 				found = true
+		// 			}
+		// 		}
+		// 		if found {
+		// 			s.WriteString(v.String())
+		// 			s.WriteString(",")
+		// 		}
+		// 	}
+		// }
 		// simulate very slow db access
 		time.Sleep(650 * time.Millisecond)
 		return s.String()

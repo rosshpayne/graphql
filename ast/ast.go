@@ -430,6 +430,7 @@ func (f *FragmentSpread) String() string {
 type InlineFragment struct {
 	//
 	//Parent      HasSelectionSetProvider
+	sdl.Name_                       // dummy name supplied to hold location info
 	TypeCond    sdl.Name_           // supplied by typeCondition if specified, otherwise its the type of the parent object's selectionset.
 	TypeCondAST sdl.GQLTypeProvider // populated during checkField??
 	//
@@ -495,8 +496,8 @@ func (f *InlineFragment) AssignTypeCondAST(err *[]error, cache *pse.Cache_) {
 
 		}
 	}
-
 }
+
 func (f *InlineFragment) CheckInputValueType(err *[]error) {}
 
 func (f *InlineFragment) String() string { // Query will now satisfy Node interface and complete GQLStmtProvider

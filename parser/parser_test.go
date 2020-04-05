@@ -26,7 +26,49 @@ func trimWS(input string) string {
 
 }
 
-func TestXQGood(t *testing.T) {
+func TestParseQuery(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				
+		type Query {
+			user (id : Int) : User
+		}
+		
+		type User {
+				  Xid : [Int!]
+				  Zname : String
+    			  profilePic(size: Int) : T1
+    			  }
+    			  
+    	type T1 { 
+    			aa : String
+    			bb : [[Int]!]!
+    			cc : T2
+    			ff : Int
+    			gghi : Float
+    			xyz : String
+    			dog : String
+    	}
+    	
+    	type T2 {
+    	    	ddd: String
+    			eee (f : Int) : Int
+    	}
+`
+
+		setup(inputSDL, t)
+	}
+	//
+	// Test
+	//
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
     Xid
@@ -36,7 +78,7 @@ func TestXQGood(t *testing.T) {
     	bb
     	cc {
     		add: ddd
-    		aee: eee ( f : "abcdef-hij" )
+    		aee: eee ( f : $devicePicSize )
     	}
     	ff
     	gghi
@@ -46,26 +88,46 @@ func TestXQGood(t *testing.T) {
 }
 }
 `
+	var expectedDoc string = `query getZuckProfile($devicePicSize: Int = 1234) {
+  xyzalias: user(id: 4) {
+    Xid
+    Zname
+    profilePic(size: 1234) {
+    	aa
+    	bb
+    	cc {
+    		add: ddd
+    		aee: eee ( f : 1234 )
+    	}
+    	ff
+    	gghi
+    	xyz
+    	dog
+    }
+}
+}
+	`
+	var parseErrs []string
 
+	schema := "DefaultDoc"
 	l := lexer.New(input)
 	p := New(l)
-	d, errs := p.ParseDocument()
-	fmt.Printf(`Doc: [%s]\n`, d.String())
-	if len(errs) > 0 {
-		t.Errorf("Unexpected, should be 0 errors, got %d", len(errs))
-		for _, v := range errs {
-			t.Errorf(`Unexpected error: %s`, v.Error())
+
+	doc, errs := p.ParseDocument(schema)
+	//
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		if compare(doc.String(), expectedDoc) {
+			t.Logf("Got:      [%s] \n", trimWS(doc.String()))
+			t.Logf("Expected: [%s] \n", trimWS(expectedDoc))
+			t.Errorf(`Unexpected document for %s. `, t.Name())
 		}
 	}
-	if compare(d.String(), input) {
-		t.Errorf("Got:      [%s] \n", trimWS(d.String()))
-		t.Errorf("Expected: [%s] \n", trimWS(input))
-		t.Errorf(`Unexpected: program.String() wrong. `)
-	}
+	//
 
 }
 
-func TestXQMissingRPAREN(t *testing.T) {
+func TestParseMissingRPAREN(t *testing.T) {
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
     Xid
@@ -85,20 +147,18 @@ func TestXQMissingRPAREN(t *testing.T) {
 }
 `
 
-	expectedErr := `Expected an argument name followed by colon got an "} ff" at line: 10, column: 35`
+	parseErrs := []string{
+		`Expected an argument name or a right parenthesis got "} ff" at line: 10, column: 35`,
+	}
 
 	l := lexer.New(input)
 	p := New(l)
 	_, errs := p.ParseDocument()
-	//fmt.Println(d.String())
-	for _, v := range errs {
-		if v.Error() != expectedErr {
-			t.Errorf(`Wrong Error got=[%q] expected [%s]`, v.Error(), expectedErr)
-		}
-	}
+	checkErrors(errs, parseErrs, t)
 }
 
-func TestXQMisplacedVariable(t *testing.T) {
+func TestParseMisplacedVariable(t *testing.T) {
+
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
     Xid
@@ -120,229 +180,221 @@ func TestXQMisplacedVariable(t *testing.T) {
 
 }
 `
-	expectedErr := `Expected an argument name followed by colon got an "$ devicePicSize" at line: 7, column: 9`
+	parseErrs := []string{
+		`Expected an argument name or a right parenthesis got "$ devicePicSize" at line: 7, column: 9`,
+	}
 
 	l := lexer.New(input)
 	p := New(l)
 	_, errs := p.ParseDocument()
 
-	for _, v := range errs {
-		if v.Error() != expectedErr {
-			t.Errorf(`Wrong Error got=[%q] expected [%s]`, v.Error(), expectedErr)
-		}
-	}
+	checkErrors(errs, parseErrs, t)
 }
 
-func TestXQArgumentNull(t *testing.T) {
+func TestParseArgumentNull(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				
+		type Query {
+			user (id : Int) : User
+		}
+		
+		type User {
+				  sex : [Int!]
+				  author : Person
+    			  }
+    			  `
+		setup(inputSDL, t)
+	}
+	//
+	// Test
+	//
 	var input = `query getZuckProfile($devicePicSize: [Int!] = [1234 23 234 32 null] ) {
   xyzalias: user(id: 4) {
     sex
-    Person {
-    	Name
-    	Age
+    author {
+    	name
+    	age
     }
   }
 }
 `
-	var expectedErr [1]string
-	expectedErr[0] = `List cannot contain NULLs at line: 1 column: 63`
+
+	parseErrs := []string{
+		`List cannot contain NULLs at line: 1 column: 63`,
+	}
 
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
 	_, errs := p.ParseDocument()
-	for _, ex := range expectedErr {
-		if len(ex) == 0 {
-			break
-		}
-		found := false
-		for _, err := range errs {
-			if trimWS(err.Error()) == trimWS(ex) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Expected Error = [%q]`, ex)
-		}
-	}
-	for _, got := range errs {
-		found := false
-		for _, exp := range expectedErr {
-			if trimWS(got.Error()) == trimWS(exp) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Unexpected Error = [%q]`, got.Error())
-		}
-	}
+
+	checkErrors(errs, parseErrs, t)
 }
 
-func TestXQNoName1(t *testing.T) {
+func TestParseNoName1(t *testing.T) {
 	var input = `query  {
   xyzalias: user(id: 4) {
-    Person {
-    	Name
-    	Age
+    author {
+    	name
+    	age
     }
   }
 }
 `
-	var expectedErr [1]string
-	expectedErr[0] = ``
+	var parseErrs []string
 
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
 	d, errs := p.ParseDocument()
-	for _, ex := range expectedErr {
-		if len(ex) == 0 {
-			break
-		}
-		found := false
-		for _, err := range errs {
-			if trimWS(err.Error()) == trimWS(ex) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Expected Error = [%q]`, ex)
-		}
-	}
-	for _, got := range errs {
-		found := false
-		for _, exp := range expectedErr {
-			if trimWS(got.Error()) == trimWS(exp) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Unexpected Error = [%q]`, got.Error())
-		}
-	}
-	if compare(d.String(), input) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(input))
-		t.Errorf(`*************  program.String() wrong.`)
+
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		t.Log(d.String())
 	}
 }
 
-func TestXQNoName2(t *testing.T) {
+func TestParseNoName2(t *testing.T) {
 	var input = `query ($devicePicSize: [Int!] = [1234 23 234 32] ) {
   xyzalias: user(id: 4) {
-    Person {
-    	Name
-    	Age
+    author {
+    	name
+    	age
     }
   }
 }
 `
-	var expectedErr [1]string
-	expectedErr[0] = ``
+	var parseErrs []string
 
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
 	d, errs := p.ParseDocument()
-	for _, ex := range expectedErr {
-		if len(ex) == 0 {
-			break
-		}
-		found := false
-		for _, err := range errs {
-			if trimWS(err.Error()) == trimWS(ex) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Expected Error = [%q]`, ex)
-		}
-	}
-	for _, got := range errs {
-		found := false
-		for _, exp := range expectedErr {
-			if trimWS(got.Error()) == trimWS(exp) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Unexpected Error = [%q]`, got.Error())
-		}
-	}
-	if compare(d.String(), input) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(input))
-		t.Errorf(`*************  program.String() wrong.`)
+
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		t.Log(d.String())
 	}
 }
 
-func TestXQNoName3(t *testing.T) {
+func TestParseNullLiteral(t *testing.T) {
 	var input = `query ($devicePicSize: Int! = null ) {
   xyzalias: user(id: 4) {
-    Person {
-    	Name
-    	Age
+    author {
+		name   
+		age
     }
   }
 }
 `
-	var expectedErr [1]string
-	expectedErr[0] = `Value cannot be NULL at line: 1 column: 31`
+	var parseErrs []string = []string{
+		`Value cannot be NULL at line: 1 column: 31`,
+	}
 
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
 	d, errs := p.ParseDocument()
-	for _, ex := range expectedErr {
-		if len(ex) == 0 {
-			break
-		}
-		found := false
-		for _, err := range errs {
-			if trimWS(err.Error()) == trimWS(ex) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Expected Error = [%q]`, ex)
-		}
-	}
-	for _, got := range errs {
-		found := false
-		for _, exp := range expectedErr {
-			if trimWS(got.Error()) == trimWS(exp) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Unexpected Error = [%q]`, got.Error())
-		}
-	}
-	if compare(d.String(), input) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(input))
-		t.Errorf(`*************  program.String() wrong.`)
+
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		t.Log(d.String())
 	}
 }
 
-func TestXQIllegal1(t *testing.T) {
-	var input = `query getZuckProfile(#devicePicSize: Int = 1234) {
+func TestParseMissingDollar(t *testing.T) {
+	var input = `query getZuckProfile(devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
-    Xid
-    Zname
+    author {
+		name   
+		age
+    }
 }
 }
 `
-	expectedErr := `Error: Expected "$" got "#" at [1 : 22]`
+	parseErrs := []string{
+		`Missing "$" at position, line: 1, column: 22 at line: 1, column: 21`,
+	}
+
 	l := lexer.New(input)
 	p := New(l)
 	_, errs := p.ParseDocument()
-	for _, v := range errs {
-		if v.Error() != expectedErr {
-			fmt.Println(v.Error())
-			t.Errorf(`Wrong Error got=[%q] expected [%s]`, v.Error(), expectedErr)
-		}
+
+	checkErrors(errs, parseErrs, t)
+
+}
+
+func TestParseMissingDollar2(t *testing.T) {
+	var input = `query getZuckProfile(@devicePicSize: Int = 1234) {
+  xyzalias: user(id: 4) {
+    author {
+		name   
+		age
+    }
+}
+}
+`
+	parseErrs := []string{
+		`Expected "$" got "@" at position, line: 1, column: 22 at line: 1, column: 21`,
 	}
+
+	l := lexer.New(input)
+	p := New(l)
+	_, errs := p.ParseDocument()
+
+	checkErrors(errs, parseErrs, t)
+
+}
+
+func TestParseMissingDollar3(t *testing.T) {
+	var input = `query getZuckProfile(#asf adsf asdf
+	$devicePicSize: Int = 1234) {
+  xyzalias: user(id: 4) {
+    author {
+		name   
+		age
+    }
+}
+}
+`
+	var parseErrs []string
+
+	l := lexer.New(input)
+	p := New(l)
+	d, errs := p.ParseDocument()
+
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		t.Log(d.String())
+	}
+
+}
+
+func TestParseMissingDollar4(t *testing.T) {
+	var input = `query getZuckProfile(#$devicePicSize: Int = 1234) {
+  xyzalias: user(id: 4) {
+    author {
+		name   
+		age
+    }
+}
+}
+`
+	var parseErrs []string = []string{
+		`Missing "$" at position, line: 2, column: 3 at line: 1, column: 21`,
+	}
+
+	l := lexer.New(input)
+	p := New(l)
+	_, errs := p.ParseDocument()
+
+	checkErrors(errs, parseErrs, t)
+
 }
 
 func TestXQIllegal2(t *testing.T) {
