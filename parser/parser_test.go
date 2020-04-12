@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -262,6 +261,31 @@ func TestParseNoName1(t *testing.T) {
 }
 
 func TestParseNoName2(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				
+		type Query {
+			user (id : Int) : User
+		}
+		
+		type User {
+				  sex : [Int!]
+				  author : Person
+    			  }
+    			  `
+		setup(inputSDL, t)
+	}
+	//
+	// Test
+	//
 	var input = `query ($devicePicSize: [Int!] = [1234 23 234 32] ) {
   xyzalias: user(id: 4) {
     author {
@@ -284,6 +308,31 @@ func TestParseNoName2(t *testing.T) {
 }
 
 func TestParseNullLiteral(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				
+		type Query {
+			user (id : Int) : User
+		}
+		
+		type User {
+				  sex : [Int!]
+				  author : Person
+    			  }
+    			  `
+		setup(inputSDL, t)
+	}
+	//
+	// Test
+	//
 	var input = `query ($devicePicSize: Int! = null ) {
   xyzalias: user(id: 4) {
     author {
@@ -308,6 +357,31 @@ func TestParseNullLiteral(t *testing.T) {
 }
 
 func TestParseMissingDollar(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				
+		type Query {
+			user (id : Int) : User
+		}
+		
+		type User {
+				  sex : [Int!]
+				  author : Person
+    			  }
+    			  `
+		setup(inputSDL, t)
+	}
+	//
+	// Test
+	//
 	var input = `query getZuckProfile(devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
     author {
@@ -318,7 +392,7 @@ func TestParseMissingDollar(t *testing.T) {
 }
 `
 	parseErrs := []string{
-		`Missing "$" at position, line: 1, column: 22 at line: 1, column: 21`,
+		`Missing "$", at line: 1, column: 22`,
 	}
 
 	l := lexer.New(input)
@@ -330,6 +404,28 @@ func TestParseMissingDollar(t *testing.T) {
 }
 
 func TestParseMissingDollar2(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				
+		type Query {
+			user (id : Int) : User
+		}
+		
+		type User {
+				  sex : [Int!]
+				  author : Person
+    			  }
+    			  `
+		setup(inputSDL, t)
+	}
 	var input = `query getZuckProfile(@devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
     author {
@@ -340,7 +436,7 @@ func TestParseMissingDollar2(t *testing.T) {
 }
 `
 	parseErrs := []string{
-		`Expected "$" got "@" at position, line: 1, column: 22 at line: 1, column: 21`,
+		`Expected "$" got "@", at line: 1, column: 22`,
 	}
 
 	l := lexer.New(input)
@@ -352,6 +448,31 @@ func TestParseMissingDollar2(t *testing.T) {
 }
 
 func TestParseMissingDollar3(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				
+		type Query {
+			user (id : Int) : User
+		}
+		
+		type User {
+				  sex : [Int!]
+				  author : Person
+    			  }
+    			  `
+		setup(inputSDL, t)
+	}
+	//
+	// Test
+	//
 	var input = `query getZuckProfile(#asf adsf asdf
 	$devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
@@ -376,6 +497,28 @@ func TestParseMissingDollar3(t *testing.T) {
 }
 
 func TestParseMissingDollar4(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				
+		type Query {
+			user (id : Int) : User
+		}
+		
+		type User {
+				  sex : [Int!]
+				  author : Person
+    			  }
+    			  `
+		setup(inputSDL, t)
+	}
 	var input = `query getZuckProfile(#$devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
     author {
@@ -386,7 +529,7 @@ func TestParseMissingDollar4(t *testing.T) {
 }
 `
 	var parseErrs []string = []string{
-		`Missing "$" at position, line: 2, column: 3 at line: 1, column: 21`,
+		`Missing "$", at line: 2, column: 3`,
 	}
 
 	l := lexer.New(input)
@@ -397,48 +540,7 @@ func TestParseMissingDollar4(t *testing.T) {
 
 }
 
-func TestXQIllegal2(t *testing.T) {
-	var input = `query getZuckProfile(!devicePicSize: Int = 1234) {
-  xyzalias: user(id: 4) {
-    Xid
-    Zname
-}
-}
-`
-	expectedErr := `Error: Expected "$" got "!" at [1 : 22]`
-	l := lexer.New(input)
-	p := New(l)
-	_, errs := p.ParseDocument()
-
-	for _, v := range errs {
-		if v.Error() != expectedErr {
-			fmt.Println(v.Error())
-			t.Errorf(`Wrong Error got=[%q] expected [%s]`, v.Error(), expectedErr)
-		}
-	}
-}
-
-func TestXQIllegal3(t *testing.T) {
-	var input = `query getZuckProfile(?devicePicSize: Int = 1234) {
-  xyzalias: user(id: 4) {
-    Xid
-    Zname
-}
-}
-`
-	expectedErr := `Error: Expected "$" got "?" at [1 : 22]`
-	l := lexer.New(input)
-	p := New(l)
-	_, errs := p.ParseDocument()
-	for _, v := range errs {
-		if v.Error() != expectedErr {
-			fmt.Println(v.Error())
-			t.Errorf(`Wrong Error got=[%q] expected [%s]`, v.Error(), expectedErr)
-		}
-	}
-}
-
-func TestXQIllegal4(t *testing.T) {
+func TestParseIllegalInName(t *testing.T) {
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: us*er(id: 4) {
     Xid
@@ -446,19 +548,18 @@ func TestXQIllegal4(t *testing.T) {
 }
 }
 `
-	expectedErr := `Expected an identifier for a fragment or inlinefragment got ILLEGAL. at [2 : 15]`
+	parseErrs := []string{
+		`Expected an identifier for a fragment or inlinefragment got ILLEGAL. at line: 2, column: 15`,
+	}
 
 	l := lexer.New(input)
 	p := New(l)
 	_, errs := p.ParseDocument()
-	for _, v := range errs {
-		if v.Error() != expectedErr {
-			fmt.Println(v.Error())
-			t.Errorf(`Wrong Error got=[%q] expected [%s]`, v.Error(), expectedErr)
-		}
-	}
+
+	checkErrors(errs, parseErrs, t)
+
 }
-func TestXQMissingArgName(t *testing.T) {
+func TestParseMissingArgName(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
@@ -479,20 +580,18 @@ func TestXQMissingArgName(t *testing.T) {
 
 }
 `
+	parseErrs := []string{
+		`Expected an argument name or a right parenthesis got ": 65.4" at line: 7, column: 10`,
+	}
 
-	expectedErr := `Error: Expected an argument name followed by colon got an ": 65.4" at [7 : 10]`
 	l := lexer.New(input)
 	p := New(l)
 	_, errs := p.ParseDocument()
 
-	for _, v := range errs {
-		if v.Error() != expectedErr {
-			t.Errorf(`Wrong Error got=[%q] expected [%s]`, v.Error(), expectedErr)
-		}
-	}
+	checkErrors(errs, parseErrs, t)
 }
 
-func TestXQMissingColon(t *testing.T) {
+func TestParseMissingColon(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: user(id: 4) {
@@ -514,20 +613,18 @@ func TestXQMissingColon(t *testing.T) {
 }
 `
 
-	expectedErr := `Error: Expected an argument name followed by colon got an "acd 65.4" at [7 : 10]`
+	parseErrs := []string{
+		`Expected an argument name or a right parenthesis got "acd 65.4" at line: 7, column: 10`,
+	}
+
 	l := lexer.New(input)
 	p := New(l)
 	_, errs := p.ParseDocument()
 
-	for _, v := range errs {
-		//fmt.Println(v)
-		if v.Error() != expectedErr {
-			t.Errorf(`Wrong Error got=[%q] expected [%s]`, v.Error(), expectedErr)
-		}
-	}
+	checkErrors(errs, parseErrs, t)
 }
 
-func TestXQLeadingDoubleUnderscore(t *testing.T) {
+func TestParseLeadingDoubleUnderscore(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: __use_r(id: 4) {
@@ -536,18 +633,19 @@ func TestXQLeadingDoubleUnderscore(t *testing.T) {
   }
 }
 `
-	expectedErr := `identifer [__use_r] cannot start with two underscores at [2 : 13]`
+	parseErrs := []string{
+		`identifer "__use_r" cannot start with two underscores at line: 2, column: 13`,
+		`Field "__use_r" is not a member of "Query" (SDL Object "Query") at line: 2 column: 13`,
+	}
+
 	l := lexer.New(input)
 	p := New(l)
 	_, errs := p.ParseDocument()
-	for _, v := range errs {
-		if v.Error() != expectedErr {
-			t.Errorf(`program.String() wrong. got=[%q] expected [%s]`, v.Error(), expectedErr)
-		}
-	}
+
+	checkErrors(errs, parseErrs, t)
 }
 
-func TestXQLeadingSingleUnderscore(t *testing.T) {
+func TestParseLeadingSingleUnderscore(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
   xyzalias: _use_r(id: 4) {
@@ -556,972 +654,419 @@ func TestXQLeadingSingleUnderscore(t *testing.T) {
   }
 }
 `
-	expectedDoc := `
- query getZuckProfile( $devicePicSize:Int = 1234) { 
-                xyzalias : _use_r ( id : 4) {
-                        Xid
-                        Zname
-                        }
-        }`
+
+	var parseErrs []string = []string{
+		`Field "_use_r" is not a member of "Query" (SDL Object "Query") at line: 2 column: 13`,
+	}
+
 	l := lexer.New(input)
 	p := New(l)
-	d, _ := p.ParseDocument()
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
+	_, errs := p.ParseDocument()
+
+	checkErrors(errs, parseErrs, t)
 
 }
 
-func TestXQStmtVariableNoDefault(t *testing.T) {
+func TestParseStmtVariableNoDefault(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int) {
-  xyzalias: _use_r(id: false) {
-    Xid
-    Zname
+  xyzalias: user(id: 33) {
+    sex
+    author
   }
 }
 `
-	expectedDoc := `
- query getZuckProfile( $devicePicSize:Int) { 
-                xyzalias : _use_r ( id : false ) {
-                        Xid
-                        Zname
-                        }
-        }`
+
+	var parseErrs []string
+
+	schema := "DefaultDoc"
 	l := lexer.New(input)
 	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println(e.Error())
-	}
-	fmt.Println(d.String())
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
+
+	doc, errs := p.ParseDocument(schema)
+	//
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		if compare(doc.String(), input) {
+			t.Logf("Got:      [%s] \n", trimWS(doc.String()))
+			t.Logf("Expected: [%s] \n", trimWS(input))
+			t.Errorf(`Unexpected document for %s. `, t.Name())
+		}
 	}
 
 }
 
-func TestXQBoolArgValue(t *testing.T) {
+func TestParseBoolArgValue(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id: false) {
-    Xid
-    Zname
+  xyzalias: user(id: false) {
+    sex
+    author
   }
 }
 `
-	expectedDoc := `
- query getZuckProfile( $devicePicSize:Int = 1234) { 
-                xyzalias : _use_r ( id : false ) {
-                        Xid
-                        Zname
-                        }
-        }`
+	var parseErrs []string = []string{
+		`Required type for argument "id" is Int, got Boolean at line: 2 column: 18`,
+	}
+
+	schema := "DefaultDoc"
 	l := lexer.New(input)
 	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println(e.Error())
-	}
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
+
+	doc, errs := p.ParseDocument(schema)
+	//
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		if compare(doc.String(), input) {
+			t.Logf("Got:      [%s] \n", trimWS(doc.String()))
+			t.Logf("Expected: [%s] \n", trimWS(input))
+			t.Errorf(`Unexpected document for %s. `, t.Name())
+		}
 	}
 
 }
 
-func TestXQMultiArgValue(t *testing.T) {
+func TestParseMultiArgValue(t *testing.T) {
+	//
+	// setup
+	//
+	{
+		input := `	type Query {
+			user (id : Int name: String) : User
+		}`
+		setup(input, t)
+	}
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id: false name: """Ross""" ) {
-    Xid
-    Zname
+  xyzalias: user(id: 23 name: """Ross""" ) {
+    sex
+    author
   }
 }
 `
-	expectedDoc := `
-query getZuckProfile( $devicePicSize:Int = 1234) {
-                xyzalias : _use_r ( id : false name : """Ross""" ) {
-                        Xid
-                        Zname
-                        }
-        }`
+
+	var parseErrs []string
+
+	schema := "DefaultDoc"
 	l := lexer.New(input)
 	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println(e.Error())
+
+	doc, errs := p.ParseDocument(schema)
+	//
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		if compare(doc.String(), input) {
+			t.Logf("Got:      [%s] \n", trimWS(doc.String()))
+			t.Logf("Expected: [%s] \n", trimWS(input))
+			t.Errorf(`Unexpected document for %s. `, t.Name())
+		}
 	}
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
+
+	//
+	// teardown
+	//
+	{
+		input := `	type Query {
+			user (id : Int) : User
+		}`
+		teardown(input, t)
 	}
 
 }
-func TestXQBooleanVarType(t *testing.T) {
+func TestParseBooleanVarType(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Boolean = false) {
-  xyzalias: _use_r(id: $devicePicSize) {
-    Xid
-    Zname
+  xyzalias: user(id: $devicePicSize) {
+    sex
+    author
   }
 }`
-	expectedDoc := `query getZuckProfile($devicePicSize: Boolean = false) {
-  xyzalias: _use_r(id: false) {
-    Xid
-    Zname
-  }
-}`
+
+	var parseErrs []string = []string{
+		`Required type for argument "id" is Int, got Boolean at line: 2 column: 18`,
+	}
+
+	schema := "DefaultDoc"
 	l := lexer.New(input)
 	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
 
-}
-
-func TestXQVariableReference(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id: $devicePicSize) {
-    Xid
-    Zname
-  }
-}`
-	expectedDoc := `query getZuckProfile( $devicePicSize : Int = 1234) {
-  xyzalias: _use_r ( id: 1234) {
-    Xid
-    Zname
-  }
-}`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQWrongVariableNameInArgument(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id: $ePicSize) {
-    Xid
-    Zname
-  }
-}
-`
-	expectedErr := "Variable, ePicSize not defined  at [2 : 25]"
-	l := lexer.New(input)
-	p := New(l)
-	_, err := p.ParseDocument()
-
-	if p.hasError() && err[0].Error() != expectedErr {
-		t.Errorf(`program.String() wrong. got=[%q] expected [%s]`, err[0].Error(), expectedErr)
-	}
-}
-
-func TestXQNullValue(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id: null) {
-    Xid
-    Zname
-  }
-}
-`
-
-	expectedDoc := `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id: null) {
-    Xid
-    Zname
-  }
-}
-`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	//fmt.Println(d.String())
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQList0(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id: [1 2 34 56.78]) {
-    Xid
-    Zname
-  }
-}
-`
-
-	expectedDoc := `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id:  [1 2 34 56.78]) {
-    Xid
-    Zname
-  }
-}
-`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println(d.String())
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQList1(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 ] "abc" "def"]) {
-    Xid
-    Zname
-  }
-}
-`
-
-	expectedDoc := `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 ] "abc" "def"]) {
-    Xid
-    Zname
-  }
-}
-`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println(d.String())
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQList2(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id: [1 2 34 56.78 [6 "xyz" [ "yut" 33 false ] null 78.076 true $devicePicSize] false "abc" ]) {
-    Xid
-    Zname
-  }
-}
-`
-
-	expectedDoc := `query getZuckProfile($devicePicSize: Int = 1234) {
-   xyzalias: _use_r(id: [1 2 34 56.78 [6 "xyz" [ "yut" 33 false ] null  78.076 true 1234] false "abc" ]) {
-    Xid
-    Zname
-  }
-}
-`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println(d.String())
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQUseOfCommas(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id: [1 2,, 34, ,56.78 , [6 "xyz" , [ "yut" 33 false ]  null 78.076 true ,$devicePicSize] false,,, "abc" ]) {
-    Xid
-    Zname
-  }
-}
-`
-
-	expectedDoc := `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id: [1 2,, 34, ,56.78 , [6 "xyz" , [ "yut" 33 false ] null 78.076 true ,1234] false,,, "abc" ]) {
-    Xid
-    Zname
-  }
-}
-`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println(d.String())
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQUseOfCommas2(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id: [1 2,, 34, ,56.78 , [6 "xyz" , [ "yut" 33 false ] null 78.076 true ,$devicePicSize] false,,, "abc" ]) {
-    Xid,
-    ,Zname,
-  }
-}
-`
-
-	expectedDoc := `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: _use_r(id: [1 2 34 56.78  [6 "xyz"  [ "yut" 33 false ] null 78.076 true 1234] false "abc" ]) {
-    Xid
-    Zname
-  }
-}
-`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println(d.String())
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQObject1(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 ] "abc" "def"] obj: { id:1 cat :234 food : [ 1 2 3] }) {
-    Xid
-    Zname
-  }
-}
-`
-
-	expectedDoc := `query getZuckProfile($devicePicSize: Int = 1234) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 ] "abc" "def"] obj: { id:1 cat :234 food : [ 1 2 3] }) {
-    Xid
-    Zname
-  }
-}
-`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println(d.String())
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQObjecWithVariable(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 $devicePicSize] "abc" "def"] obj: { id:1 cat :$devicePicSize food : [ 1 2 3] } node: "flight" ) {
-    Xid
-    Zname
-  }
-}
-`
-
-	expectedDoc := `query getZuckProfile($devicePicSize: Int = 1234) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 1234 ] "abc" "def"] obj: { id:1 cat :1234 food : [ 1 2 3] } node: "flight" ) {
-    Xid
-    Zname
-  }
-}
-`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println(d.String())
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQObjecWithVariableWrongInput(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: OddOne = 1234) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 $devicePicSize] "abc" "def"] obj: { id:1 cat :$devicePicSize food : [ 1 2 3] } node: "flight" ) {
-    Xid
-    Zname
-  }
-}
-`
-
-	expectedDoc := `query getZuckProfile($devicePicSize: Int = 1234) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 1234 ] "abc" "def"] obj: { id:1 cat :1234 food : [ 1 2 3] } node: "flight" ) {
-    Xid
-    Zname
-  }
-}
-`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println(d.String())
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQObjecWithVariableWrongInput2(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: OddOne = {x: 123 y:123}) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 $devicePicSize] "abc" "def"] obj: { id:1 cat :$devicePicSize food : [ 1 2 3] } node: "flight" ) {
-    Xid
-    Zname
-  }
-}
-`
-
-	expectedDoc := `query getZuckProfile($devicePicSize:{x: 123 y:123}) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 1234 ] "abc" "def"] obj: { id:1 cat :1234 food : [ 1 2 3] } node: "flight" ) {
-    Xid
-    Zname
-  }
-}
-`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println(d.String())
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQObjecWithVariableWrongInput3(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: OddOne = {x: 123 yy:123.2}) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 $devicePicSize] "abc" "def"] obj: { id:1 cat :$devicePicSize food : [ 1 2 3] } node: "flight" ) {
-    Xid
-    Zname
-  }
-}
-`
-
-	expectedDoc := `query getZuckProfile($devicePicSize: OddOne ={x: 123 y:123.2}) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 {x: 123 y:123.2}] "abc" "def"] obj: { id:1 cat : {x: 123 y:123.2} food : [ 1 2 3] } node: "flight" ) {
-    Xid
-    Zname
-  }
-}
-`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println(d.String())
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQObjecWithVariableWrongInputType(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: Person = {x: 123 yy:123.2}) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 $devicePicSize] "abc" "def"] obj: { id:1 cat :$devicePicSize food : [ 1 2 3] } node: "flight" ) {
-    Xid
-    Zname
-  }
-}
-`
-
-	var expectedErr [1]string
-	expectedErr[0] = `Argument "devicePicSize" type "Person", is not an input type at line: 1 column: 38`
-
-	l := lexer.New(input)
-	p := New(l)
-	//	p.ClearCache()
-	_, errs := p.ParseDocument()
-	for _, ex := range expectedErr {
-		if len(ex) == 0 {
-			break
-		}
-		found := false
-		for _, err := range errs {
-			if trimWS(err.Error()) == trimWS(ex) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Expected Error = [%q]`, ex)
-		}
-	}
-	for _, got := range errs {
-		found := false
-		for _, exp := range expectedErr {
-			if trimWS(got.Error()) == trimWS(exp) {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf(`Unexpected Error = [%q]`, got.Error())
+	doc, errs := p.ParseDocument(schema)
+	//
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		if compare(doc.String(), input) {
+			t.Logf("Got:      [%s] \n", trimWS(doc.String()))
+			t.Logf("Expected: [%s] \n", trimWS(input))
+			t.Errorf(`Unexpected document for %s. `, t.Name())
 		}
 	}
 
 }
 
-func TestXQObjecWithVariableCorrectInput(t *testing.T) {
-
-	var input = `query getZuckProfile($devicePicSize: OddOne = {x: 123 y:123.2}) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 $devicePicSize] "abc" "def"] obj: { id:1 cat :$devicePicSize food : [ 1 2 3] } node: "flight" ) {
-    Xid
-    Zname
-  }
-}
-`
-
-	expectedDoc := `query getZuckProfile($devicePicSize: OddOne ={x: 123 y:123.2}) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 {x: 123 y:123.2}] "abc" "def"] obj: { id:1 cat : {x: 123 y:123.2} food : [ 1 2 3] } node: "flight" ) {
-    Xid
-    Zname
-  }
-}
-`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println(d.String())
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQLotsOfFItems(t *testing.T) {
+func TestParseVariableReference(t *testing.T) {
 
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-   xyzalias: _use_r(id: [1 2 34 ] a : 1 b : 2 c : 3 d:4 e:5 abc:33 par:"abc" kit:123.12 aa:"a" d:123 p:12 c:"3" f:98 z:12 dd:23 d0:98 e:5 abc:33 par:"abc" kit:123.12 aa:"a" d:123 p:12 c:"3" f:98 z:12 dd:23 d0:98)  {
-    Xid
-    Zname
-    aa
-    nn
-    dddw
-    ew
-    sd
-    fs
-    sf
-    ef
-    xv
-    gd
-    df
-    fb
-    readPoser
-    fdg
-    cb
-    dr
-    dd
-    ha
-    ss
-    yj
-    rb
-    nvn
-    fgh
-    rt
-    ghj
-    ll
-    kk
-    nn
-    r3
-    r4
-    r5
-    r6
-    r7
-    r9
-    r8
-    r10
-      Xid
-    Zname
-    aa
-    nn
-    dddw
-    ew
-    sd
-    fs
-    sf
-    ef
-    xv
-    gd
-    df
-    fb
-    readPoser
-    fdg
-    cb
-    dr
-    dd
-    ha
-    ss
-    yj
-    rb
-    nvn
-    fgh
-    rt
-    ghj
-    ll
-    kk
-    nn
-    r3
-    r4
-    r5
-    r6
-    r7
-    r9
-    r8
-    r10
-      Xid
-    Zname
-    aa
-    nn
-    dddw
-    ew
-    sd
-    fs
-    sf
-    ef
-    xv
-    gd
-    df
-    fb
-    readPoser
-    fdg
-    cb
-    dr
-    dd
-    ha
-    ss
-    yj
-    rb
-    nvn
-    fgh
-    rt
-    ghj
-    ll
-    kk
-    nn
-    r3
-    r4
-    r5
-    r6
-    r7
-    r9
-    r8
-    r10
+  xyzalias: user(id: $devicePicSize) {
+    sex
+    author
+  }
+}`
+
+	var parseErrs []string
+	schema := "DefaultDoc"
+	l := lexer.New(input)
+	p := New(l)
+
+	_, errs := p.ParseDocument(schema)
+	//
+	checkErrors(errs, parseErrs, t)
+}
+
+func TestParseWrongVariableNameInArgument(t *testing.T) {
+	{
+		//
+		// Setup
+		//
+		inputSDL := `
+		schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				
+		type Query {
+			user (id : Int) : User
+		}
+		
+		type User {
+				  sex : [Int!]
+				  author : Person
+    			  }
+    			  `
+		setup(inputSDL, t)
+	}
+
+	//
+	// Test
+	//
+	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
+  xyzalias: user(id: $ePicSize) {
+    sex	
+    author
+  }
+}
+`
+	var parseErrs []string = []string{
+		`Variable, ePicSize not defined  at line: 2, column: 23`,
+	}
+	schema := "DefaultDoc"
+	l := lexer.New(input)
+	p := New(l)
+
+	_, errs := p.ParseDocument(schema)
+	t.Log(errs)
+	//
+	checkErrors(errs, parseErrs, t)
+}
+
+func TestParseNullValue(t *testing.T) {
+
+	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
+  xyzalias: user(id: null) {
+    sex
+    author
+  }
+}
+`
+	var parseErrs []string
+	schema := "DefaultDoc"
+	l := lexer.New(input)
+	p := New(l)
+
+	_, errs := p.ParseDocument(schema)
+	//
+	checkErrors(errs, parseErrs, t)
+}
+
+func TestParseList0(t *testing.T) {
+
+	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
+  xyzalias: user(id: [1 2 34 56.78]) {
+    sex
+    author
   }
 }
 `
 
+	var parseErrs []string = []string{`Expected a Int for argument "id", got a List, at line: 2 column: 35`}
+	schema := "DefaultDoc"
 	l := lexer.New(input)
 	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	fmt.Println("doc ", d.String())
-	if compare(d.String(), input) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(input))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
+
+	_, errs := p.ParseDocument(schema)
+	//
+	checkErrors(errs, parseErrs, t)
 
 }
 
-func TestXQDirective11(t *testing.T) {
+func TestParseList1(t *testing.T) {
 
-	var input = `query getZuckProfile($withFriends: Boolean = true) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 ] "abc" "def"] obj: { id:1 cat :234 food : [ 1 2 3] }) {
-    Xid @include(if: $withFriends) @ Size (aa:1 bb:2) @ Pack (filter: true) 
-    Zname @include(if: $withFriends) @ Size (aa:1 bb:2) @ Pack (filter: true) {
-      aa
-      bb
-      cc
-    }
+	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
+   xyzalias: user(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 ] "abc" "def"]) {
+    sex
+    author
+  }
+}
+`
+	var parseErrs []string = []string{`Expected a Int for argument "id", got a List, at line: 2 column: 72`}
+	schema := "DefaultDoc"
+	l := lexer.New(input)
+	p := New(l)
+
+	_, errs := p.ParseDocument(schema)
+	//
+	checkErrors(errs, parseErrs, t)
+
+}
+
+func TestParseUseOfCommas(t *testing.T) {
+	//
+	// setup
+	//
+	{
+		input := `	type Query {
+			user (id : [Int]) : User
+		}`
+		setup(input, t)
+	}
+	//
+	// test
+	//
+	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
+  xyzalias: user(id: [1 2,, 34, ,56 , ]) {
+    sex
+    author
+  }
+}
+`
+	expectedDoc := `	query getZuckProfile ( $devicePicSize : Int = 1234) { 
+                        xyzalias : user (id:[1 2 34 56] ) {
+                                sex
+                                author
+                     } }`
+
+	var parseErrs []string
+
+	schema := "DefaultDoc"
+	l := lexer.New(input)
+	p := New(l)
+
+	doc, errs := p.ParseDocument(schema)
+	//
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		if compare(doc.String(), expectedDoc) {
+			t.Logf("Got:      [%s] \n", trimWS(doc.String()))
+			t.Logf("Expected: [%s] \n", trimWS(expectedDoc))
+			t.Errorf(`Unexpected document for %s. `, t.Name())
+		}
+	}
+	//
+	// teardown
+	//
+	{
+		input := `	type Query {
+			user (id : Int!) : User
+		}`
+		teardown(input, t)
+	}
+}
+
+func TestParserObject1(t *testing.T) {
+	//
+	// setup
+	//
+	{
+		input := `	type Query {
+			user (id : Objx) : User
+		}
+		input Objx {
+			id  : Float
+			cat : Int
+			food : [Int!]
+		}
+			`
+
+		setup(input, t)
+	}
+
+	var input = `query getZuckProfile($devicePicSize: Objx = { id : 23.4 cat : 32 food : [1,2,3,4 55 ]}) {
+   xyzalias: user(id: $devicePicSize) {
+     sex
+     author
   }
 }
 `
 
-	expectedDoc := `query getZuckProfile($withFriends: Boolean = true) {
-   xyzalias: _use_r(id: [1 2 34 56.78 "xyz" false [ 1 2 3 4 ] "abc" "def"] obj: { id:1 cat :234 food : [ 1 2 3] }) {
-    Xid @include(if: true) @ Size (aa:1 bb:2) @ Pack (filter: true) 
-    Zname @include(if: true) @ Size (aa:1 bb:2) @ Pack (filter: true) {
-      aa
-      bb
-      cc
-    }
-  }
-}
+	var expectedDoc string = `query getZuckProfile ($devicePicSize:Objx={id:23.4cat:32food:[123455]})
+	   { xyzalias:user(id:{id:23.4 cat:32 food: [ 1 2 3 4 55]}) {
+	   sex
+	   author
+	   }
+	   }`
+	var parseErrs []string
+
+	schema := "DefaultDoc"
+	l := lexer.New(input)
+	p := New(l)
+
+	doc, errs := p.ParseDocument(schema)
+	//
+	checkErrors(errs, parseErrs, t)
+	if len(errs) == 0 {
+		if compare(doc.String(), expectedDoc) {
+			t.Logf("Got:      [%s] \n", trimWS(doc.String()))
+			t.Logf("Expected: [%s] \n", trimWS(expectedDoc))
+			t.Errorf(`Unexpected document for %s. `, t.Name())
+		}
+	}
+	//
+	// teardown
+	//
+	{
+		inputSDL := `
+		schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				
+		type Query {
+			user (id : Int) : User
+		}
+		
+		type User {
+				  Xid : [Int!]
+				  Zname : String
+    			  profilePic(size: Int) : T1
+    			  }
+    			  
+    	type T1 { 
+    			aa : String
+    			bb : [[Int]!]!
+    			cc : T2
+    			ff : Int
+    			gghi : Float
+    			xyz : String
+    			dog : String
+    	}
+    	
+    	type T2 {
+    	    	ddd: String
+    			eee (f : Int) : Int
+    	}
 `
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
+
+		teardown(inputSDL, t)
 	}
-	fmt.Println(d.String())
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQFragment1(t *testing.T) {
-
-	var input = `query withFragments {
-  user(id: 4) {
-    friends(first: 10) {
-      ...friendFields
-    }
-    mutualFriends(first: 10) {
-      ...friendFields
-    }
-} }
-fragment friendFields on User {
-  id
-name
-  profilePic(size: 50)
-}`
-
-	expectedDoc := `
-query withFragments {
-  user(id: 4) {
-    friends(first: 10) {
-      ...friendFields
-    }
-    mutualFriends(first: 10) {
-      ...friendFields
-    }
-} }
-fragment friendFields on User {
-  id
-name
-  profilePic(size: 50)
-}
-`
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println("[" + d.String() + "]")
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQFragment2(t *testing.T) {
-
-	var input = `query withNestedFragments {
-  user(id: 4) {
-    friends(first: 10) {
-      ...friendFields
-}
-mutualFriends(first: 10) {
-      ...friendFields
-} }
-}
-fragment friendFields on User {
-  id
-name
-  ...standardProfilePic
-}
-fragment standardProfilePic on User {
-  profilePic(size: 50)
-}`
-
-	expectedDoc := `query withNestedFragments {
-  user(id: 4) {
-    friends(first: 10) {
-      ...friendFields
-}
-mutualFriends(first: 10) {
-      ...friendFields
-} }
-}
-fragment friendFields on User {
-  id
-name
-  ...standardProfilePic
-}
-fragment standardProfilePic on User {
-  profilePic(size: 50)
-}`
-
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	fmt.Println("[" + d.String() + "]")
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQInlineFragment2(t *testing.T) {
-
-	var input = `query inlineFragmentTyping {
-  profiles(handles: ["zuck", "cocacola"]) {
-    handle
-    ... on User {
-      friends {
-        count
-} }
-    ... on Page {
-      likers {
-count
-} }
-} }`
-	expectedDoc := `query inlineFragmentTyping {
-  profiles(handles: ["zuck", "cocacola"]) {
-    handle
-    ... on User {
-      friends {
-        count
-} }
-    ... on Page {
-      likers {
-count
-} }
-} }`
-
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println("[" + d.String() + "]")
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
-}
-
-func TestXQInlineFragWithDirective(t *testing.T) {
-
-	var input = `query inlineFragmentNoType($expandedInfo: Boolean) {
-  user(handle: "zuck") {
-    id
-    name
-    ... @include(if: $expandedInfo) {
-      firstName
-      lastName
-      birthday
-} }
-}`
-	expectedDoc := `query inlineFragmentNoType($expandedInfo: Boolean) {
-  user(handle: "zuck") {
-    id
-    name
-    ... @include(if: ) {
-      firstName
-      lastName
-      birthday
-} }
-}`
-
-	l := lexer.New(input)
-	p := New(l)
-	d, err := p.ParseDocument()
-	for _, e := range err {
-		fmt.Println("*** ", e.Error())
-	}
-	//fmt.Println("[" + d.String() + "]")
-	if compare(d.String(), expectedDoc) {
-		fmt.Println(trimWS(d.String()))
-		fmt.Println(trimWS(expectedDoc))
-		t.Errorf(`*************  program.String() wrong.`)
-	}
-
 }

@@ -70,7 +70,20 @@ func TestQueryArgumentValue(t *testing.T) {
 	//
 	{
 
-		inputSDL := `type Query {allPersons  (  last : Int     first : [[String!]]   ) : [Person!] }`
+		inputSDL := `
+				schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+		type Person {
+					name : String! 
+					age  (  ScaleBy : Float   ) : [[Int!]]! 
+					other : [String!] 
+					posts  (  resp : [Int!]   ) : [Post!] 
+		}
+		type Query {allPersons  (  last : Int     first : [[String!]]   ) : [Person!] }
+		`
 		setup(inputSDL, t)
 	}
 
@@ -112,7 +125,7 @@ func TestQueryArgumentValue(t *testing.T) {
 	//
 	{
 		inputSDL := `type Query {allPersons  (  last : Int     first : Int   ) : [Person!] }`
-		setup(inputSDL, t)
+		teardown(inputSDL, t)
 	}
 }
 
@@ -121,7 +134,14 @@ func TestQuerySingleResolverLast2a(t *testing.T) {
 	// Setup
 	//
 	{
-		inputSDL := `type Query {allPersons  (  last : Int     first : Int   ) : [Person!] }`
+		inputSDL := `
+				schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				type Person {name : String! age  (  ScaleBy : Float   ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]   ) : [Post!] }
+				type Query {allPersons  (  last : Int     first : Int   ) : [Person!] }`
 		setup(inputSDL, t)
 	}
 
@@ -276,7 +296,13 @@ func TestQuerySingleResolverLast2b(t *testing.T) {
 	//
 	{
 
-		inputSDL := `type Query {allPersons  (  last : Int     first : Int   ) : [Person!] }`
+		inputSDL := `
+				schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				type Query {allPersons  (  last : Int     first : Int   ) : [Person!] }`
 		setup(inputSDL, t)
 	}
 
@@ -390,7 +416,15 @@ func TestQuerySingleResolverLast2b(t *testing.T) {
 	// Teardown
 	//
 	{
-		inputSDL := `type Query {allPersons(last : Int  first : [[String!]] ) : [Person!]}`
+		inputSDL := `
+				schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				
+				type Person {name : String! age  (  ScaleBy : Float   ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]   ) : [Post!] }
+				type Query {allPersons(last : Int  first : [[String!]] ) : [Person!]}`
 		teardown(inputSDL, t)
 	}
 }
@@ -502,7 +536,15 @@ func TestQueryTwoResolver_43(t *testing.T) {
 	//
 	{
 
-		inputSDL := `type Query {allPersons  (  last : Int     first : Int   ) : [Person!] }`
+		inputSDL := `
+				schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				
+				type Person {name : String! age  (  ScaleBy : Float   ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]   ) : [Post!] }
+				type Query {allPersons  (  last : Int     first : Int   ) : [Person!] }`
 		setup(inputSDL, t)
 	}
 	//
@@ -520,8 +562,7 @@ func TestQueryTwoResolver_43(t *testing.T) {
 	         		age
 	         	}
 	         }
-	         age
-	         #other
+	         #age
 	     }
 	}
 `
@@ -631,8 +672,14 @@ func TestQueryTwinResolverX(t *testing.T) {
 	//
 	{
 
-		inputSDL := `type Query {allPersons  (  last : Int     first : Int   ) : Person! }
-					type Person {name : String! age  (  ScaleBy : Float   ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]   ) : [Post!] }`
+		inputSDL := `
+				schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				type Query {allPersons  (  last : Int     first : Int   ) : Person! }
+				type Person {name : String! age  (  ScaleBy : Float   ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]   ) : [Post!] }`
 		setup(inputSDL, t)
 	}
 	//
@@ -724,32 +771,35 @@ func TestQueryFieldCheckWithWrongName(t *testing.T) {
 	checkErrors(errs, expectedErr, t)
 }
 
-func TestQueryFieldCheckWithFragmentSpreadNoDirective_44(t *testing.T) {
+func TestQueryFieldCheckWithInlineFragmentNoDirective_44(t *testing.T) {
 
 	//
 	// Setup
 	//
 	{
-		inputSDL := `type Person {name : String! age(ScaleBy : Float ) : [[Int!]]! other : [String!] posts(resp :  Int! ) : [Post!]}
-					type Query {allPersons(last : Int  first : [[String!]] ) : [Person!]}
-					type Post {title : String! title2 : String! author : [Person!]!}`
+		inputSDL := `
+		type Query {allPersons(last : Int  first : Float ) : [Person!]}
+		
+		type Person {name : String! age(ScaleBy : Float ) : [[Int!]]! other : [String!] posts(resp :  Int! ) : [Post!]}
+		
+		type Post {title : String! title2 : String! author : [Person!]!}`
 		setup(inputSDL, t)
 	}
 	//
 	// Test
 	//
 	var input = `
-	query XYZ ($expandedInfo: Boolean = false) {
+	query XYZ ($expandedInfo: Boolean = true) {
 	     allPersons(last: 2) {
 	         name 
 	         age
-	         ... {						# inline fragment
-	         	posts (resp:$expandedInfo) {
-	         		author {
+	         ... @include {						# inline fragment
+	         	posts (resp: 3) {
+	         		 author {
 	         	 		name
 	         	 		age
 	         	     }
-	         	  address
+	         	     address
 	        	 }
 	           }
 	     }
@@ -757,8 +807,7 @@ func TestQueryFieldCheckWithFragmentSpreadNoDirective_44(t *testing.T) {
 `
 
 	var expectedErr []string = []string{
-		`Field "address" is not a member of "posts" (SDL Object "Post") at line: 12 column: 14`,
-		`Required type for argument "resp" is Int, got Boolean at line: 7 column: 19`,
+		`Field "address" is not a member of "posts" (SDL Object "Post") at line: 12 column: 17`,
 	}
 
 	l := lexer.New(input)
@@ -1149,6 +1198,18 @@ func TestQueryWithFragmentSpreadDirectiveFALSE(t *testing.T) {
 
 func TestQueryInlineFragmentWithSameAttributeTrue(t *testing.T) {
 
+	//
+	// Setup
+	//
+	{
+		inputSDL := `type Query {allPersons(last : Int  first : [[String!]] ) : [Person!]}
+		type Person {name : String! age(ScaleBy : Float ) : [[Int!]]! other : [String!] posts(resp :  Int! ) : [Post!]}
+		type Post {title : String! title2 : String! author : [Person!]!}`
+		setup(inputSDL, t)
+	}
+	//
+	//	Test
+	//
 	var input = `query XYZ ($expandedInfo: Boolean = true) {
 		     allPersons(last: 2) {
 		         aliasN: name
@@ -1168,7 +1229,7 @@ func TestQueryInlineFragmentWithSameAttributeTrue(t *testing.T) {
 	`
 
 	var expectedErr []string = []string{
-		`Field "Person.Query/allPersons/age" has already been specified at line: 14 column: 12`,
+		`Field "Person.Query/allPersons/Person/age" has already been specified at line: 14 column: 12`,
 	}
 
 	expectedResult := ``

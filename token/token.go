@@ -94,7 +94,7 @@ type Token struct {
 }
 
 func (t *Token) AtPosition() string {
-	return fmt.Sprintf("at position, line: %d, column: %d\n", t.Loc.Line, t.Loc.Col)
+	return fmt.Sprintf("at line: %d, column: %d\n", t.Loc.Line, t.Loc.Col)
 }
 
 var keywords = map[string]struct {

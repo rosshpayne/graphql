@@ -80,7 +80,7 @@ type HasSelectionSetProvider interface {
 
 type SelectionSetProvider interface {
 	SelectionSetNode()
-	SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) // TODO: don't like this here.
+	SolicitDependents(unresolved sdl.UnresolvedMap) // TODO: don't like this here.
 	//	Resolve()
 	String() string
 }
@@ -93,7 +93,7 @@ type GQLStmtProvider interface {
 	//Node()
 	StatementNode()
 	//TypeSystemNode()
-	SolicitNonScalarTypes(unresolved sdl.UnresolvedMap)
+	SolicitDependents(unresolved sdl.UnresolvedMap)
 	CheckIsInputType(err *[]error)
 	CheckInputValueType(err *[]error)
 	StmtName() StmtName_
@@ -122,6 +122,7 @@ type OperationDef interface {
 type FragmentDef interface {
 	FragmentNode()
 	GetSelectionSet() []SelectionSetProvider
+	// parse
 	AssignTypeCond(string, *sdl.Loc_, *[]error)
 	//	Executable
 	AssignTypeCondAST(*[]error, *pse.Cache_)
@@ -225,6 +226,9 @@ func (o *OperationStmt) String() string { // Query will now satisfy Node interfa
 		}
 		s.WriteString(") ")
 	}
+	for _, v := range o.Directives {
+		s.WriteString(v.String())
+	}
 	s.WriteString("{ ")
 	for _, v := range o.SelectionSet {
 		s.WriteString(v.String())
@@ -239,16 +243,16 @@ func (o *OperationStmt) String() string { // Query will now satisfy Node interfa
 	return s.String()
 }
 
-func (o *OperationStmt) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
+func (o *OperationStmt) SolicitDependents(unresolved sdl.UnresolvedMap) {
 	// statements can have two entities that are unresolved.
 	//  either a type (SDL) or a fragment (statement). However SDL are only checked during checkField function.
 	// check any unresolved fragments
 	for _, v := range o.Variable {
-		v.SolicitNonScalarTypes(unresolved)
+		v.SolicitDependents(unresolved)
 	}
 	o.Directives_.SolicitAbstractTypes(unresolved) // TODO: should directives be included
 	for _, v := range o.SelectionSet {
-		v.SolicitNonScalarTypes(unresolved)
+		v.SolicitDependents(unresolved)
 	}
 }
 
@@ -338,13 +342,14 @@ func (f *FragmentStmt) String() string { // Query will now satisfy Node interfac
 	return s.String()
 }
 
-func (f *FragmentStmt) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
+func (f *FragmentStmt) SolicitDependents(unresolved sdl.UnresolvedMap) {
 
 	unresolved[f.TypeCond] = nil //&ty
-	// }
-	f.Directives_.SolicitAbstractTypes(unresolved)
+	for _, v := range f.Directives {
+		unresolved[v.Name_] = nil
+	}
 	for _, v := range f.SelectionSet {
-		v.SolicitNonScalarTypes(unresolved)
+		v.SolicitDependents(unresolved)
 	}
 }
 
@@ -359,6 +364,7 @@ func (f *FragmentStmt) AssignTypeCondAST(err *[]error, cache *pse.Cache_) {
 			*err = append(*err, fmt.Errorf(`Type Condition for fragment "%s" not found`, f.Name))
 			return
 		}
+
 		switch x.(type) {
 		case *sdl.Object_, *sdl.Union_, *sdl.Interface_:
 			f.TypeCondAST = x
@@ -397,9 +403,12 @@ type FragmentSpread struct {
 
 func (f *FragmentSpread) SelectionSetNode() {}
 
-// not SDL type information can be specified in spread, however we should resolve associated fragment stmt. NO. Fragment stmt will always be defined in query document.
-// TODO: consider Fragment library stored in db. This could be dangerous as defnition is not stored with query and could lead to errors very easily e.g. db def gets changed by someone.
-func (f *FragmentSpread) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {}
+func (f *FragmentSpread) SolicitDependents(unresolved sdl.UnresolvedMap) {
+	//unresolved[f.Name_] = nil // this is a fragment stmt not a SDL type so do not include in solicit.
+	for _, v := range f.Directives {
+		unresolved[v.Name_] = nil
+	}
+}
 
 //func (f *FragementSpread) ExecutableDefinition() {}
 
@@ -442,12 +451,15 @@ func (f *InlineFragment) SelectionSetNode() {}
 
 //func (f *InlineFragment) Resolve()          {}
 func (f *InlineFragment) FragmentNode() {}
-func (f *InlineFragment) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
+func (f *InlineFragment) SolicitDependents(unresolved sdl.UnresolvedMap) {
 	if f.TypeCond.Exists() {
 		unresolved[f.TypeCond] = nil
 	}
+	for _, v := range f.Directives {
+		unresolved[v.Name_] = nil
+	}
 	for _, v := range f.SelectionSet {
-		v.SolicitNonScalarTypes(unresolved)
+		v.SolicitDependents(unresolved)
 	}
 }
 
@@ -472,7 +484,11 @@ func (f *InlineFragment) GetSelectionSet() []SelectionSetProvider {
 }
 
 func (f *InlineFragment) AssignTypeCondAST(err *[]error, cache *pse.Cache_) {
+	//
+	// ...TypeCondition-opt Directives- opt SelectionSet
+	//
 	if f.TypeCondAST == nil {
+		// TODO this section is probable redundant as was populated during parse
 		x, err_ := cache.FetchAST(f.TypeCond.Name)
 		if err_ != nil {
 			*err = append(*err, err_)
@@ -649,19 +665,15 @@ func (f *Field) ExpandArguments(root *sdl.Field_, err *[]error) (failed bool) {
 	return failed
 }
 
-func (f *Field) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
-	// get type of the field
-	// TODO need to have type name associated with this field either in Field struct or passed into checkUnresolvedType
-	//      also sdl.CacheFetch need type name passed in not field name
-	//      CANNOT resolve field Type as it is not known at this point (populated during checkField which will then resolve the type)
-	// if len(f.SelectionSet) != 0 { // non-Scalar type
-	// 	unresolved[f.Name] = nil
-	// }
-	f.Directives_.SolicitAbstractTypes(unresolved)
+func (f *Field) SolicitDependents(unresolved sdl.UnresolvedMap) {
+	//f.Directives_.SolicitAbstractTypes(unresolved)
+	for _, v := range f.Directives {
+		unresolved[v.Name_] = nil
+	}
 	// TODO - need the type nane for the arguments, as its the type we want to resolve.
 	//f.Arguments_.SolicitAbstractTypes(unresolved) // added 31 March 2020
 	for _, v := range f.SelectionSet {
-		v.SolicitNonScalarTypes(unresolved)
+		v.SolicitDependents(unresolved)
 	}
 }
 
@@ -763,7 +775,7 @@ func (n *VariableDef) AssignType(t *sdl.GQLtype) {
 	n.Type = t
 }
 
-func (n *VariableDef) SolicitNonScalarTypes(unresolved sdl.UnresolvedMap) {
+func (n *VariableDef) SolicitDependents(unresolved sdl.UnresolvedMap) {
 	if !n.Type.IsScalar() {
 		if n.Type.AST == nil {
 			// check in cache only at this stage.
