@@ -17,18 +17,18 @@ type Cache_ struct {
 	cache map[string]*entry
 }
 
-func NewCache() *Cache_ {
+func newCache() *Cache_ {
 	return &Cache_{cache: make(map[string]*entry)}
 }
 
-// AddEntry is not concurrent safe. Intended for a single thread operation.
-func (t *Cache_) AddEntry(name ast.StmtName_, stmt ast.GQLStmtProvider) {
+// addEntry is not concurrent safe. Intended for a single thread operation.
+func (t *Cache_) addEntry(name ast.StmtName_, stmt ast.GQLStmtProvider) {
 	e := &entry{data: stmt}
 	t.cache[string(name)] = e
 }
 
 // FetchAST - TODO: copy code from sdl.??
-func (t *Cache_) FetchAST(name ast.StmtName_) ast.GQLStmtProvider {
+func (t *Cache_) fetchAST(name ast.StmtName_) ast.GQLStmtProvider {
 
 	name_ := string(name)
 	e, ok := t.cache[name_]
@@ -41,7 +41,7 @@ func (t *Cache_) FetchAST(name ast.StmtName_) ast.GQLStmtProvider {
 
 }
 
-func (t *Cache_) CacheClear() {
+func (t *Cache_) cacheClear() {
 	fmt.Println("******************************************")
 	fmt.Println("************ CLEAR CACHE *****************")
 	fmt.Println("******************************************")

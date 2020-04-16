@@ -76,6 +76,8 @@ type (
 
 		parseFns map[token.TokenType]parseFn
 		perror   []error
+		perrorMx sync.Mutex
+		sync.Mutex
 	}
 )
 
@@ -84,6 +86,7 @@ var TypeResolveErr = errors.New("")
 
 var (
 	//	enumRepo      ast.EnumRepo_
+	// TODO why are these pkg variables - rethink?
 	FragmentStmts  map[sdl.NameValue_]*ast.FragmentStmt
 	OperationStmts map[sdl.NameValue_]*ast.OperationStmt
 	noName         string = "__NONAME__"
@@ -97,7 +100,7 @@ func New(l *lexer.Lexer) *Parser {
 	// GL type cache
 	p.tyCache = pse.NewCache()
 	// GL statement cache
-	p.stmtCache = NewCache()
+	p.stmtCache = newCache()
 	// cache for resolver functions
 	p.Resolver = resolver.New()
 
@@ -114,6 +117,13 @@ func New(l *lexer.Lexer) *Parser {
 	// remove cacheClar before releasing..
 	//
 	//ast.CacheClear()
+	//
+	//  open log file and set logger
+	//
+	p.logf = openLogFile()
+	p.logr = log.New(p.logf, "GQL:", logrFlags)
+	p.tyCache.SetLogger(p.logr)
+
 	return p
 }
 
@@ -123,6 +133,13 @@ func New(l *lexer.Lexer) *Parser {
 // 	FragmentStmts = make(map[sdl.NameValue_]*ast.FragmentStmt)
 // 	OperationStmts = make(map[sdl.NameValue_]*ast.OperationStmt)
 // }
+
+func (p *Parser) ClearCache() {
+	p.logr.Print("Clear type cache")
+	if p.tyCache != nil {
+		p.tyCache.CacheClear()
+	}
+}
 
 func (p *Parser) Loc() *sdl.Loc_ {
 	//l,c  := p.l.Loc()
@@ -151,12 +168,16 @@ func (p *Parser) hasError() bool {
 }
 
 // addErr appends to error slice held in parser.
-func (p *Parser) addErr(s string) error {
+func (p *Parser) addErr(s string, abort ...bool) error {
 	if strings.Index(s, " at line: ") == -1 {
 		s += fmt.Sprintf(" at line: %d, column: %d", p.curToken.Loc.Line, p.curToken.Loc.Col)
 	}
 	e := errors.New(s)
+	if len(abort) > 0 {
+		p.abort = abort[0]
+	}
 	p.perror = append(p.perror, e)
+
 	return e
 }
 
@@ -242,12 +263,6 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		db.SetDocument(doc[0])
 	}
 	//
-	//  open log file and set logger
-	//
-	p.logf = openLogFile()
-	p.logr = log.New(p.logf, "SDL:", logrFlags)
-	p.tyCache.SetLogger(p.logr)
-	//
 	// Phase 1a: parse all statements (query, fragment) in the document and add to cache if statement has no errors
 	//          parsing can be done without reference to SDL, however, during the validation phase we will need
 	//          to know the type information provided by the SDL.
@@ -261,9 +276,9 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 			// TODO: instead of returning move onto next stmt (if there is one), so we can continue parsing.
 			return nil, p.perror
 		}
-		// if p.hasError() {
-		// 	return nil, p.perror
-		// }
+		if p.hasError() { // uncommented 15April
+			return nil, p.perror
+		}
 
 		if stmtAST != nil {
 			stmt = &ast.Statement{Type: stmtType, AST: stmtAST, Name: string(stmtAST.StmtName())}
@@ -275,12 +290,13 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		}
 		fmt.Printf("Statement: %s %#v\ns", string(stmtAST.StmtName()), stmt)
 		if stmtAST != nil {
-			p.stmtCache.AddEntry(stmt.AST.StmtName(), stmt.AST) //	ast.Add2StmtCache(stmt.AST.StmtName(), stmt.AST)
+			p.stmtCache.addEntry(stmt.AST.StmtName(), stmt.AST) //	ast.Add2StmtCache(stmt.AST.StmtName(), stmt.AST)
 		}
 		allErrors = append(allErrors, p.perror...)
 		p.perror = nil
 	}
 	//
+	fmt.Println("+++ EOF +++")
 	if failed {
 		return nil, allErrors
 	}
@@ -371,11 +387,12 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 	//
 	// phase 2  - check statment names - can only be one short named (ie. no name provided) statement
 	//
-	if len(OperationStmts) > 1 {
+	if len(OperationStmts) > 1 { //  OperationStmts  is populated in parseOperation func
 		var (
 			nm    string
 			short int
 		)
+		fmt.Println("here...3")
 		// look for shortened version of statments - which are populated at parse stmt.
 		// when no stmt name is specified set name to "__NONAME__/<i>"
 		for i := 0; ; i++ {
@@ -411,6 +428,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		}
 		// execute fragment statements first
 		// generic checks
+		fmt.Printf(" resolveSDLdependents for fragment stmt %s\n", stmt.AST.StmtName())
 		p.resolveSDLdependents(stmt.AST, p.tyCache)
 		if p.hasError() {
 			return nil, p.perror
@@ -422,7 +440,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		// add to cache
 		//
 		if len(p.perror) == 0 {
-			p.stmtCache.AddEntry(stmt.AST.StmtName(), stmt.AST) // ast.Add2StmtCache(stmt.AST.StmtName(), stmt.AST)
+			p.stmtCache.addEntry(stmt.AST.StmtName(), stmt.AST) // ast.Add2StmtCache(stmt.AST.StmtName(), stmt.AST)
 		} else {
 			failed = true
 		}
@@ -440,6 +458,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		if stmt.Type == "fragment" {
 			continue
 		}
+		fmt.Println("here..5")
 		//
 		// generic checks
 		//
@@ -462,7 +481,7 @@ func (p *Parser) ParseDocument(doc ...string) (*ast.Document, []error) {
 		// add stmt to stmt cache
 		//
 		if len(p.perror) == 0 {
-			p.stmtCache.AddEntry(stmt.AST.StmtName(), stmt.AST) //ast.Add2StmtCache(stmt.AST.StmtName(), stmt.AST)
+			p.stmtCache.addEntry(stmt.AST.StmtName(), stmt.AST) //ast.Add2StmtCache(stmt.AST.StmtName(), stmt.AST)
 		} else {
 			failed = true
 		}
@@ -823,7 +842,7 @@ func (p *Parser) checkFields_(root sdl.GQLTypeProvider, set []ast.SelectionSetPr
 			pathRoot := pathRoot
 			fmt.Println("checkFields_ : for Fragment Spread - qry.Name ", qry.Name)
 			//get associated Fragment statement AST, via the FragmentSpread Name
-			stmtAST := p.stmtCache.FetchAST(ast.StmtName_(qry.Name.String()))
+			stmtAST := p.stmtCache.fetchAST(ast.StmtName_(qry.Name.String()))
 			if stmtAST == nil {
 				p.addErr(fmt.Sprintf(`Fragment definition "%s" not found %s`, qry.Name, qry.Name_.AtPosition()))
 				//p.abort = true
@@ -1130,19 +1149,19 @@ func (p *Parser) executeStmt(stmt_ *ast.Statement) string {
 		return ""
 	}
 	// only for operational Query
-	// TODO - need to implement execute for Fragment statements, Mutation & Subscription stmts.
+	// TODO - need to implement Mutation & Subscription stmts.
 	if stmt.Type != "query" {
 		p.addErr(fmt.Sprintf("Expected an Query OperationStmt in execute phase. Aborting. "))
 		return ""
 	}
-	fmt.Println("len(stmt.SelectionSet ", len(stmt.SelectionSet))
-	fmt.Println(stmt_)
+	//
+	// concurrently execute stmt roots (graph entry point defined in schema) - concurrent safe
+	//
 	wg.Add(len(stmt.SelectionSet))
-	out = make([]strings.Builder, len(stmt.SelectionSet))
+
+	out = make([]strings.Builder, len(stmt.SelectionSet), len(stmt.SelectionSet))
 	root := stmt_.RootAST
-	//
-	// execute all stmt root fields (representing SDL object types) concurrently
-	//
+
 	for i, opFld := range stmt.SelectionSet {
 		opFld := opFld
 		go p.executeStmtOp(opFld, string(root.TypeName()), nil, &out[i], &wg)
@@ -1150,7 +1169,7 @@ func (p *Parser) executeStmt(stmt_ *ast.Statement) string {
 
 	wg.Wait()
 	//
-	// combine all stmt outputs
+	// combine stmt outputs
 	//
 	var ts strings.Builder
 	fmt.Println("==== output ====== ")
@@ -1172,7 +1191,10 @@ func (p *Parser) executeStmt(stmt_ *ast.Statement) string {
 
 }
 
+// executeStmtOp executes an operational statement. Multiple stmts can be executed concurrently as does method, executeStmt
+//
 func (p *Parser) executeStmtOp(qryFld ast.SelectionSetProvider, pathRoot string, responseItems sdl.InputValueProvider, out *strings.Builder, wg *sync.WaitGroup) {
+
 	var sset = []ast.SelectionSetProvider{qryFld}
 	var responseType string = ""
 	p.executeStmt_(sset, pathRoot, responseType, responseItems, out)
@@ -1180,6 +1202,9 @@ func (p *Parser) executeStmtOp(qryFld ast.SelectionSetProvider, pathRoot string,
 }
 
 func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot string, responseType string, responseItems sdl.InputValueProvider, out *strings.Builder) { //type ObjectVals []*ArgumentT - serialized object
+	// *******************									 *******************
+	// ******************* This method is concurrency safe.  *******************
+	// *******************									 *******************
 	//
 	// gqlsset: 		 GQl-selection-set (*ast.Field, *ast.InlineFragment etc) starting with type Query (from schema query)
 	// pathRoot:	 the path (concatenation of field names) taken to get to current field
@@ -1304,15 +1329,27 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 	//  on inline-Fragment type...
 	//  on fragmentspread type...
 	//
-	fmt.Println()
-	fmt.Println("* * * * * IN executeStmt_  set, len (set) ", gqlsset, len(gqlsset))
-	fmt.Println("* * * * * IN executeStmt_  pathRoot      ", pathRoot)
-	fmt.Println("* * * * * IN executeStmt_  responseType. ", responseType)
-	fmt.Println("* * * * * IN executeStmt_  responseItems ", responseItems)
+	// fmt.Println()
+	// fmt.Println("* * * * * IN executeStmt_  set, len (set) ", gqlsset, len(gqlsset))
+	// fmt.Println("* * * * * IN executeStmt_  pathRoot      ", pathRoot)
+	// fmt.Println("* * * * * IN executeStmt_  responseType. ", responseType)
+	// fmt.Println("* * * * * IN executeStmt_  responseItems ", responseItems)
 
+	const (
+		abort bool = true
+	)
+
+	addErr := func(s string, abort ...bool) {
+		p.Lock()
+		p.addErr(s, abort[0])
+		p.Unlock()
+	}
+
+	p.perrorMx.Lock()
 	if p.hasError() {
 		return
 	}
+	p.perrorMx.Unlock()
 
 	for _, qryFld := range gqlsset {
 
@@ -1326,7 +1363,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 			// ast.Field.Name = AllPersons, ast.Field.SDLfld = Person
 			// ast.Field.Name = Age	, ast.Field.SDLfld = Int
 			// ast.Field.Name = posts, ast.Field.SDLfld = Post
-			fmt.Printf("\n\n*** Query field: %#v\n", qry)
+			//	fmt.Printf("\n\n*** Query field: %#v\n", qry)
 			var (
 				sdlTypeAST sdl.GQLTypeProvider
 				fieldPath  string
@@ -1345,7 +1382,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 			//
 			sdlFld = qry.SDLfld
 			//
-			fmt.Println("\n ============================ sdlFld =============================", qry.Name, sdlFld.Name_, qry.SDLRootAST.TypeName())
+			//	fmt.Println("\n ============================ sdlFld =============================", qry.Name, sdlFld.Name_, qry.SDLRootAST.TypeName())
 
 			if qry.Alias.Exists() {
 				fieldName = qry.Alias.String()
@@ -1367,10 +1404,10 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 				sdlTypeAST = sdlFld.Type.AST
 				fieldPath = pathRoot + "/" + sdlFld.Name_.String()
 
-				fmt.Println("********** sdlTypeAST(typename).  ", sdlTypeAST.TypeName())
-				fmt.Println("**********  pathRooth: ", sdlFld.Name_.String())
-				fmt.Println("**********  fieldPath: ", fieldPath)
-				fmt.Println("**********  qry. Name: ", qry.Name)
+				// fmt.Println("********** sdlTypeAST(typename).  ", sdlTypeAST.TypeName())
+				// fmt.Println("**********  pathRooth: ", sdlFld.Name_.String())
+				// fmt.Println("**********  fieldPath: ", fieldPath)
+				// fmt.Println("**********  qry. Name: ", qry.Name)
 
 				qry.Resolver = p.Resolver.GetFunc(fieldPath)
 
@@ -1379,8 +1416,8 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 					// use data from last resolver execution (called a default resolver), passed in via argument "responseItems"
 					//
 					if responseItems == nil {
-						p.addErr(fmt.Sprintf(`xx No responseItem. Default Resolver must have a responseItem. Field "%s" has no resolver function, %s %s`, qry.Name, sdlFld.Type.AST.TypeName(), qry.Name.AtPosition()))
-						p.abort = true
+						addErr(fmt.Sprintf(`xx No responseItem. Default Resolver must have a responseItem. Field "%s" has no resolver function, %s %s`, qry.Name, sdlFld.Type.AST.TypeName(), qry.Name.AtPosition()), abort)
+						//p.abort = true
 						return
 					}
 					//
@@ -1403,14 +1440,14 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 							writeout(pathRoot, out, ":", noNewLine)
 							if _, ok := respfld.Value.InputValueProvider.(sdl.List_); ok {
 								if sdlFld.Type.Depth == 0 {
-									p.addErr(fmt.Sprintf(`Resolver returned a list of items, expected a single item for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()))
-									p.abort = true
+									addErr(fmt.Sprintf(`Resolver returned a list of items, expected a single item for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()), abort)
+									//p.abort = true
 									return
 								}
 							} else {
 								if sdlFld.Type.Depth > 0 {
-									p.addErr(fmt.Sprintf(`Resolver returned a single value, expected a list for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()))
-									p.abort = true
+									addErr(fmt.Sprintf(`Resolver returned a single value, expected a list for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()), abort)
+									//p.abort = true
 									return
 								}
 							}
@@ -1420,7 +1457,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 								//TODO include nullable check
 								//fmt.Println("+++++ sdlFld.Type.IsType2(), riv.IsType() = ", sdlFld.Type.IsType2(), riv.IsType())
 								if sdlFld.Type.Depth == 0 {
-									p.addErr(fmt.Sprintf(`Resolver returned a list, expected a single item for "%s" %s`, sdlFld.Name, qry.Name.AtPosition()))
+									addErr(fmt.Sprintf(`Resolver returned a list, expected a single item for "%s" %s`, sdlFld.Name, qry.Name.AtPosition()))
 								}
 
 								var f func(y sdl.List_, d uint8)
@@ -1433,14 +1470,14 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 											writeout(fieldPath, out, "[ ", noNewLine)
 											d++ // nesting depth of List_
 											if d > sdlFld.Type.Depth {
-												p.addErr(fmt.Sprintf(`Exceeds nesting of List type for "%s" %s`, qry.Name, qry.Name.AtPosition()))
+												addErr(fmt.Sprintf(`Exceeds nesting of List type for "%s" %s`, qry.Name, qry.Name.AtPosition()))
 											}
 											f(x, d)
 											writeout(fieldPath, out, "] ", noNewLine)
 											d--
 										} else {
 											if d < sdlFld.Type.Depth {
-												p.addErr(fmt.Sprintf(`Expect a nesting level of %d, got %d, for scalar values in List for "%s" %s`, sdlFld.Type.Depth, d, qry.Name, qry.Name.AtPosition()))
+												addErr(fmt.Sprintf(`Expect a nesting level of %d, got %d, for scalar values in List for "%s" %s`, sdlFld.Type.Depth, d, qry.Name, qry.Name.AtPosition()))
 											}
 											// optimise by performing loop here rather than use outer for loop
 											for i := 0; i < len(y); i++ {
@@ -1463,11 +1500,11 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 							case sdl.ObjectVals:
 								//
 								if sdlFld.Type.Depth != 0 {
-									p.addErr(fmt.Sprintf(`Expected List of values for "%s", resolver response returned single value %s`, sdlFld.Name, qry.Name.AtPosition()))
+									addErr(fmt.Sprintf(`Expected List of values for "%s", resolver response returned single value %s`, sdlFld.Name, qry.Name.AtPosition()))
 								}
 								//TODO include nullable check
 								if sdlFld.Type.IsType() != riv.IsType() {
-									p.addErr(fmt.Sprintf(`2 Expected type of "%s" got %s instead for field "%s" %s`, sdlFld.Type.IsType(), riv.IsType(), sdlFld.Name, qry.Name.AtPosition()))
+									addErr(fmt.Sprintf(`2 Expected type of "%s" got %s instead for field "%s" %s`, sdlFld.Type.IsType(), riv.IsType(), sdlFld.Name, qry.Name.AtPosition()))
 								}
 								fmt.Printf("== Response is OBJECTVALS of objects/fields .")
 								writeout(fieldPath, out, "{", noNewLine)
@@ -1479,22 +1516,22 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 							default:
 								//
 								if sdlFld.Type.Depth != 0 {
-									p.addErr(fmt.Sprintf(`Expected List of values for "%s" , resolver response returned single value instead %s`, sdlFld.Name, qry.Name.AtPosition()))
+									addErr(fmt.Sprintf(`Expected List of values for "%s" , resolver response returned single value instead %s`, sdlFld.Name, qry.Name.AtPosition()))
 								}
 								//TODO include nullable check
 								if sdlFld.Type.IsType() != riv.IsType() {
-									p.addErr(fmt.Sprintf(`3 Expected type of "%s" got %s instead for field "%s" %s`, sdlFld.Type.IsType(), riv.IsType(), sdlFld.Name, qry.Name.AtPosition()))
+									addErr(fmt.Sprintf(`3 Expected type of "%s" got %s instead for field "%s" %s`, sdlFld.Type.IsType(), riv.IsType(), sdlFld.Name, qry.Name.AtPosition()))
 								}
-								p.addErr(fmt.Sprintf(`Expected Object type got scalar  %s`, qry.Name.AtPosition()))
-								p.abort = true
+								addErr(fmt.Sprintf(`Expected Object type got scalar  %s`, qry.Name.AtPosition()), abort)
+								//p.abort = true
 								return
 							}
 							break
 						}
 
 					default:
-						p.addErr(fmt.Sprintf(`Resolver response returned something other than name:value pairs. %s`, qry.Name.AtPosition()))
-						p.abort = true
+						addErr(fmt.Sprintf(`Resolver response returned something other than name:value pairs. %s`, qry.Name.AtPosition()), abort)
+						//p.abort = true
 						return
 					}
 
@@ -1530,7 +1567,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 							//
 							for _, response := range respItem {
 								// match response field against root field and  grab the associated response field data.
-								fmt.Println("Searching.. ", response.Name, sdlFld.Name)
+								//fmt.Println("Searching.. ", response.Name, sdlFld.Name)
 								if response.Name.EqualString(sdlFld.Name_.String()) { // name
 									resp = response.Value.InputValueProvider
 									break
@@ -1538,8 +1575,8 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 							}
 						}
 						if resp == nil {
-							p.addErr(fmt.Sprintf("XX No corresponding field found from response "))
-							p.abort = true
+							addErr(fmt.Sprintf("XX No corresponding field found from response "), abort)
+							//p.abort = true
 							return
 						}
 						//
@@ -1561,8 +1598,8 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 
 						default:
 							// scalar types, Int, Float, String, EnumValues - as sdlFld.Type is an Object (see above), scalars should not appear here.
-							p.addErr(fmt.Sprintf(`Expect object type for response field "%s", got scalar type field %s`, qry.Name, qry.Name.AtPosition()))
-							p.abort = true
+							addErr(fmt.Sprintf(`Expect object type for response field "%s", got scalar type field %s`, qry.Name, qry.Name.AtPosition()), abort)
+							//p.abort = true
 							return
 
 						}
@@ -1571,9 +1608,9 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 						//
 						fmt.Println("find resp argument and substitute response data..")
 						for _, arg := range sdlFld.ArgumentDefs {
-							fmt.Println(" match arguments: ", arg.Name, respType, arg.Type.IsType(), arg.Type.IsType2(), resp.IsType())
+							//fmt.Println(" match arguments: ", arg.Name, respType, arg.Type.IsType(), arg.Type.IsType2(), resp.IsType())
 							if arg.Type.IsType() == respType && arg.Type.IsType2() == resp.IsType() && arg.Name.EqualString("resp") {
-								fmt.Println("matched.....")
+								//	fmt.Println("matched.....")
 								// append a "resp" argument to the query Arguments
 								// does resp exist in query arguments for current field
 								var respArg *sdl.ArgumentT
@@ -1595,8 +1632,9 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 							}
 						}
 						if !argFound {
-							p.addErr(fmt.Sprintf(`Response data does not match required type "%s" or any resp argument in query field "%s"`, sdlFld.Type.TypeName(), qry.Name))
-							p.abort = true
+							addErr(fmt.Sprintf(`Response data does not match required type "%s" or any resp argument in query field "%s"`, sdlFld.Type.TypeName(), qry.Name), abort)
+							//p.abort = true
+
 							return
 						}
 					}
@@ -1617,18 +1655,19 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 					//
 					// verify all arguments are defined and values assigned. Add arguments if necessary
 					//
-					fmt.Printf("sdlFld: %#v\n", sdlFld)
-					fmt.Println("len(sdlFld.ArgumentDefs) ", len(sdlFld.ArgumentDefs))
+					//fmt.Printf("sdlFld: %#v\n", sdlFld)
+					//fmt.Println("len(sdlFld.ArgumentDefs) ", len(sdlFld.ArgumentDefs))
 					if qry.ExpandArguments(sdlFld, &p.perror) {
 						return
 					}
-					for _, v := range qry.Arguments {
-						fmt.Printf("argument: %s %#v\n", v.Name, v.Value)
-					}
+					// for _, v := range qry.Arguments {
+					// 	fmt.Printf("argument: %s %#v\n", v.Name, v.Value)
+					// }
 					//
 					// EXECUTE RESOLVER - using current response data (nil for the first time) and any arguments associated with field
 					//
 					fmt.Println("EXECUTE RESOLVER - using current response data (nil for the first time) and any arguments associated with field")
+
 					rch := qry.Resolver(ctx, resp, qry.Arguments) // qry.Arguments -> sdl.ObjectVals as both share common def []*ArgumentT
 					//
 					// blocking wait
@@ -1647,11 +1686,15 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 						if qry.Alias.Exists() {
 							fldNm = qry.Alias
 						}
-						p.addErr(fmt.Sprintf(ctxMsg+` produced no content, %s\n`, fldNm, qry.Name.AtPosition()))
-						p.abort = true
+
+						addErr(fmt.Sprintf(ctxMsg+` produced no content, %s\n`, fldNm, qry.Name.AtPosition()), abort)
+						//p.abort = true
+
 						return
 					}
+					p.Lock()
 					errCnt := len(p.perror)
+					p.Unlock()
 					//
 					// generate AST from response JSON { name: value name: value ... }
 					//
@@ -1659,17 +1702,17 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 					p2 := pse.New(l)
 					respItems := p2.ParseResponse() // similar to sdl.parseArguments. Populates responseItems with parsed values from response.
 					if respItems == nil {
-						p.addErr(fmt.Sprintf(`Empty response from resolver for "%s" %s`, sdlFld.Name, qry.Name.AtPosition()))
+						addErr(fmt.Sprintf(`Empty response from resolver for "%s" %s`, sdlFld.Name, qry.Name.AtPosition()))
 					}
 					if len(p2.Getperror()) > 0 {
 						// error in parsing stmt from db - this should not happen as only valid stmts are saved.
 						p.perror = append(p.perror, p2.Getperror()...)
 						fmt.Println("^^^^^ Response parse error: ", p2.Getperror())
 					}
-					fmt.Printf("finished ParseResponse: %T %s\n", respItems, respItems)                    // finished ParseResponse: ast.ObjectVals {data:[{name:"Jack Smith" age:[[53
-					fmt.Println("** RootFld Type ", sdlFld.Type, sdlFld.Type.IsType2().String())           // [Post!] List
-					fmt.Println("*** RootFld Type.IsType().String() ", sdlFld.Name, sdlTypeAST.TypeName()) // Object posts Post
-					fmt.Printf("*** RootFld Type.Depth %s %T %#v, %d \n", sdlFld.Name_, sdlFld.Type.AST, sdlFld, sdlFld.Type.Depth)
+					fmt.Printf("finished ParseResponse: %T %s\n", respItems, respItems) // finished ParseResponse: ast.ObjectVals {data:[{name:"Jack Smith" age:[[53
+					//fmt.Println("** RootFld Type ", sdlFld.Type, sdlFld.Type.IsType2().String())           // [Post!] List
+					// fmt.Println("*** RootFld Type.IsType().String() ", sdlFld.Name, sdlTypeAST.TypeName()) // Object posts Post
+					// fmt.Printf("*** RootFld Type.Depth %s %T %#v, %d \n", sdlFld.Name_, sdlFld.Type.AST, sdlFld, sdlFld.Type.Depth)
 
 					//
 					//
@@ -1700,21 +1743,21 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 						}
 						responseItems = x[0].Value.InputValueProvider
 					} else {
-						p.addErr(fmt.Sprintf(`Response should be a {type:<responseData>}, where type is "data" or name of type which data repesents e.g. Person`))
-						p.abort = true
+						addErr(fmt.Sprintf(`Response should be a {type:<responseData>}, where type is "data" or name of type which data repesents e.g. Person`), abort)
+						//p.abort = true
 						return
 					}
 					//
 					if _, ok := responseItems.(sdl.List_); ok {
 						if sdlFld.Type.Depth == 0 {
-							p.addErr(fmt.Sprintf(`Resolver returned a list, expected a single item for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()))
-							p.abort = true
+							addErr(fmt.Sprintf(`Resolver returned a list, expected a single item for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()), abort)
+							//p.abort = true
 							return
 						}
 					} else {
 						if sdlFld.Type.Depth > 0 {
-							p.addErr(fmt.Sprintf(`Resolver returned a single value, expected a list of values for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()))
-							p.abort = true
+							addErr(fmt.Sprintf(`Resolver returned a single value, expected a list of values for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()), abort)
+							//p.abort = true
 							return
 						}
 					}
@@ -1723,13 +1766,13 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 					case sdl.List_:
 						//TODO include nullable check
 						// Type check of list members will be performed in the following executeStmt checks.
-						fmt.Println("sdlTypeAST: ", sdlTypeAST.TypeName())
-						fmt.Println("qry.SS . ", len(qry.SelectionSet))
-						fmt.Println("fieldPath: ", fieldPath)
-						//TODO include nullable check
-						fmt.Println("after resolver call - List ", resp)
+						//fmt.Println("sdlTypeAST: ", sdlTypeAST.TypeName())
+						// fmt.Println("qry.SS . ", len(qry.SelectionSet))
+						// fmt.Println("fieldPath: ", fieldPath)
+						// //TODO include nullable check
+						// fmt.Println("after resolver call - List ", resp)
 						if sdlFld.Type.Depth == 0 {
-							p.addErr(fmt.Sprintf(`Resolver returned a list, expected a single item for "%s" %s`, sdlFld.Name, qry.Name.AtPosition()))
+							addErr(fmt.Sprintf(`Resolver returned a list, expected a single item for "%s" %s`, sdlFld.Name, qry.Name.AtPosition()))
 						}
 						//
 						// take response data (List element by List element) and match against GQL attributes of query and writeout result.
@@ -1744,14 +1787,14 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 									writeout(fieldPath, out, "[ ", noNewLine)
 									d++ // nesting depth of List_
 									if d > sdlFld.Type.Depth {
-										p.addErr(fmt.Sprintf(`Exceeds nesting of List type for "%s" %s`, qry.Name, qry.Name.AtPosition()))
+										addErr(fmt.Sprintf(`Exceeds nesting of List type for "%s" %s`, qry.Name, qry.Name.AtPosition()))
 									}
 									f(x, d)
 									writeout(fieldPath, out, "] ", noNewLine)
 									d--
 								} else {
 									if d < sdlFld.Type.Depth {
-										p.addErr(fmt.Sprintf(`Expect a nesting level of %d from resolver, got a depth of %d for the List for "%s" %s`, sdlFld.Type.Depth, d, qry.Name, qry.Name.AtPosition()))
+										addErr(fmt.Sprintf(`Expect a nesting level of %d from resolver, got a depth of %d for the List for "%s" %s`, sdlFld.Type.Depth, d, qry.Name, qry.Name.AtPosition()))
 									}
 									// optimise by performing loop here rather than use outer for loop
 									for i := 0; i < len(y); i++ {
@@ -1774,8 +1817,8 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 
 					case sdl.ObjectVals: // type ArgumentS []*ArgumentT  -  represents object with fields
 						if sdlFld.Type.Depth > 0 {
-							p.addErr(fmt.Sprintf("Resolver returned name value pairs (Object Values), expected a %s \n", sdlFld.Type.IsType2().String()))
-							p.abort = true
+							addErr(fmt.Sprintf("Resolver returned name value pairs (Object Values), expected a %s \n", sdlFld.Type.IsType2().String()), abort)
+							//	p.abort = true
 							return
 						}
 						fmt.Println("Response is a single object")
@@ -1788,11 +1831,13 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 						//TODO implement scalar code
 						fmt.Printf(" responseItems NOT EITHER %T\n", responseItems)
 					}
-
+					p.Lock()
 					if len(p.perror) > errCnt {
 						p.abort = true
+						p.Unlock()
 						return
 					}
+					p.Unlock()
 				}
 
 			// case ?
@@ -1804,7 +1849,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 				// scalar or List of scalar. Write out its value and return.
 				//
 				fieldPath = pathRoot + "/" + qry.Name.String()
-				fmt.Printf("xx  is a scalar response: %T   fieldPath . %s sdlFld %T %s\n", responseItems, fieldPath, sdlFld.Type.AST, sdlFld.Type.Name)
+				//fmt.Printf("xx  is a scalar response: %T   fieldPath . %s sdlFld %T %s\n", responseItems, fieldPath, sdlFld.Type.AST, sdlFld.Type.Name)
 				qry.Resolver = p.Resolver.GetFunc(fieldPath)
 
 				if qry.Resolver == nil {
@@ -1814,8 +1859,8 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 					// implicit resolver - assign response value by field name
 					//
 					if responseItems == nil {
-						p.addErr(`responseItems is empty at scalar resolve execution`)
-						p.abort = true
+						addErr(`responseItems is empty at scalar resolve execution`, abort)
+						//p.abort = true
 						return
 					}
 					writeout(pathRoot, out, fieldName)
@@ -1854,8 +1899,8 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 						}
 					}
 					if resp == nil {
-						p.addErr(fmt.Sprintf(`No corresponding  field found from response field, "%s"`, fieldName))
-						p.abort = true
+						addErr(fmt.Sprintf(`No corresponding  field found from response field, "%s"`, fieldName), abort)
+						//p.abort = true
 						return
 					}
 					//
@@ -1863,15 +1908,15 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 					//
 					if _, ok := resp.(sdl.List_); ok {
 						if sdlFld.Type.Depth == 0 {
-							p.addErr(fmt.Sprintf(`Resolver returned a list, expected single value for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()))
-							p.abort = true
+							addErr(fmt.Sprintf(`Resolver returned a list, expected single value for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()), abort)
+							//p.abort = true
 							return
 						}
 					}
 					if _, ok := resp.(sdl.List_); !ok {
 						if sdlFld.Type.Depth > 0 {
-							p.addErr(fmt.Sprintf(`Resolver returned single item, expected a List for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()))
-							p.abort = true
+							addErr(fmt.Sprintf(`Resolver returned single item, expected a List for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()), abort)
+							//p.abort = true
 							return
 						}
 					}
@@ -1903,7 +1948,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 						//  type should be List_
 
 						if sdlFld.Type.Depth == 0 {
-							p.addErr(fmt.Sprintf(`Expected a single value for "%s" , response returned a List  %s`, sdlFld.Name, qry.Name.AtPosition()))
+							addErr(fmt.Sprintf(`Expected a single value for "%s" , response returned a List  %s`, sdlFld.Name, qry.Name.AtPosition()))
 						}
 
 						var f func(y sdl.List_, d uint8)
@@ -1916,33 +1961,33 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 									writeout(fieldPath, out, "[ ", noNewLine)
 									d++ // nesting depth of List_
 									if d > sdlFld.Type.Depth {
-										p.addErr(fmt.Sprintf(`Exceeds nesting of List type for "%s" %s`, qry.Name, qry.Name.AtPosition()))
+										addErr(fmt.Sprintf(`Exceeds nesting of List type for "%s" %s`, qry.Name, qry.Name.AtPosition()))
 									}
 									f(x, d)
 									writeout(fieldPath, out, "] ", noNewLine)
 									d--
 								} else {
 									if d < sdlFld.Type.Depth {
-										p.addErr(fmt.Sprintf(`Expect a nesting level of %d, got %d, for scalar values in List for "%s" %s`, sdlFld.Type.Depth, d, qry.Name, qry.Name.AtPosition()))
+										addErr(fmt.Sprintf(`Expect a nesting level of %d, got %d, for scalar values in List for "%s" %s`, sdlFld.Type.Depth, d, qry.Name, qry.Name.AtPosition()))
 									}
 									// optimise by performing loop here rather than use outer for loop
 									for i := 0; i < len(y); i++ {
 										// for scalar only Type.Name contains the scalar type name i.e. Int, Float, Boolean etc. For ENUM and Scalar types, Name does not identify type, use BaseType, passing in the type AST.
-										fmt.Println("y[i].IsType().String(), sdlFld.Type.Name.String() -=-", y[i].IsType().String(), sdlFld.Type.Name.String())
+										//fmt.Println("y[i].IsType().String(), sdlFld.Type.Name.String() -=-", y[i].IsType().String(), sdlFld.Type.Name.String())
 										if y[i].IsType().String() != sdlFld.Type.Name.String() {
 											if !(y[i].IsType().String() == "Enum" && sdl.BaseType(sdlFld.Type.AST) == "E") {
 												if _, ok := y[i].InputValueProvider.(sdl.Null_); !ok {
-													p.addErr(fmt.Sprintf(`XX Expected "%s" got %s for "%s" %s`, sdlFld.Type.Name_.String(), y[i].IsType(), qry.Name, qry.Name.AtPosition()))
+													addErr(fmt.Sprintf(`XX Expected "%s" got %s for "%s" %s`, sdlFld.Type.Name_.String(), y[i].IsType(), qry.Name, qry.Name.AtPosition()))
 												} else {
 													var bit byte = 1
 													bit &= sdlFld.Type.Constraint >> uint(d)
 													if bit == 1 {
-														p.addErr(fmt.Sprintf(`Expected non-null got null for "%s" %s`, qry.Name, qry.Name.AtPosition()))
+														addErr(fmt.Sprintf(`Expected non-null got null for "%s" %s`, qry.Name, qry.Name.AtPosition()))
 													}
 												}
 											}
 										}
-										fmt.Println("======================================= writeout scalar ================================", y[i].String())
+										//fmt.Println("======================================= writeout scalar ================================", y[i].String())
 										writeout(fieldPath, out, y[i].String(), noNewLine)
 									}
 									break
@@ -1958,22 +2003,22 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 						// TODO: remove this case - using "null" to represent null value in response string
 						var bit byte = 1
 						if sdlFld.Type.Name.String() != riv.IsType().String() {
-							p.addErr(fmt.Sprintf(`Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
+							addErr(fmt.Sprintf(`Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
 							return
 						}
 						bit &= sdlFld.Type.Constraint
 						if bit == 1 && riv.String() == "null" {
-							p.addErr(fmt.Sprintf(`Cannot be null for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()))
+							addErr(fmt.Sprintf(`Cannot be null for %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()))
 						}
 						if !(sdlFld.Type.Name_.String() == sdl.STRING.String() || sdlFld.Type.Name_.String() == sdl.RAWSTRING.String()) {
-							p.addErr(fmt.Sprintf(`3 Expected String got %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()))
+							addErr(fmt.Sprintf(`3 Expected String got %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()))
 						}
 						s_ := string(`"` + riv.String() + `"`)
 						writeout(fieldPath, out, s_, noNewLine)
 
 					case sdl.RawString_:
 						if sdlFld.Type.Name.String() != riv.IsType().String() {
-							p.addErr(fmt.Sprintf(`4 Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
+							addErr(fmt.Sprintf(`4 Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
 							return
 						}
 						s_ := string(`"""` + riv.String() + `"""`)
@@ -1981,18 +2026,18 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 
 					case sdl.Null_:
 						if sdlFld.Type.Name.String() != riv.IsType().String() {
-							p.addErr(fmt.Sprintf(`5 Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
+							addErr(fmt.Sprintf(`5 Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
 							return
 						}
 						var bit byte = 1
 						bit &= sdlFld.Type.Constraint
 						if bit == 1 {
-							p.addErr(fmt.Sprintf(`Value cannot be null %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()))
+							addErr(fmt.Sprintf(`Value cannot be null %s %s`, sdlFld.Type.Name_.String(), qry.Name.AtPosition()))
 						}
 
 					case sdl.Int_:
 						if sdlFld.Type.Name.String() != riv.IsType().String() {
-							p.addErr(fmt.Sprintf(`4 Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
+							addErr(fmt.Sprintf(`4 Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
 							return
 						}
 						s_ := riv.String()
@@ -2000,7 +2045,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 
 					case sdl.Float_:
 						if sdlFld.Type.Name.String() != riv.IsType().String() {
-							p.addErr(fmt.Sprintf(`4 Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
+							addErr(fmt.Sprintf(`4 Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
 							return
 						}
 						s_ := riv.String()
@@ -2008,10 +2053,10 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 
 					default:
 						if sdlFld.Type.Name.String() != riv.IsType().String() {
-							p.addErr(fmt.Sprintf(`6 Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
+							addErr(fmt.Sprintf(`6 Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
 						} else {
 							s_ := resp.String()
-							p.addErr(fmt.Sprintf(`6 Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
+							addErr(fmt.Sprintf(`6 Expected "%s" got %s %s`, sdlFld.Type.Name_.String(), riv.IsType().String(), qry.Name.AtPosition()))
 							writeout(fieldPath, out, s_, noNewLine)
 						}
 					}
@@ -2047,22 +2092,22 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 						}
 					}
 					if resp == nil {
-						p.addErr(fmt.Sprintf("yy No corresponding field found from response "))
-						p.abort = true
+						addErr(fmt.Sprintf("yy No corresponding field found from response "), abort)
+						//p.abort = true
 						return
 					}
 					//
 					// verify all arguments are defined and values assigned. Add arguments if necessary
 					//
-					fmt.Printf("sdlFld: %#v\n", sdlFld)
-					fmt.Println("len(sdlFld.ArgumentDefs) ", len(sdlFld.ArgumentDefs))
+					// fmt.Printf("sdlFld: %#v\n", sdlFld)
+					// fmt.Println("len(sdlFld.ArgumentDefs) ", len(sdlFld.ArgumentDefs))
 					if qry.ExpandArguments(sdlFld, &p.perror) {
 						return
 					}
-					fmt.Println("xxlen(sdlFld.ArgumentDefs) ", len(sdlFld.ArgumentDefs))
-					for _, v := range qry.Arguments {
-						fmt.Printf("argument: %s %#v\n", v.Name, v.Value)
-					}
+					//fmt.Println("xxlen(sdlFld.ArgumentDefs) ", len(sdlFld.ArgumentDefs))
+					// for _, v := range qry.Arguments {
+					// 	fmt.Printf("argument: %s %#v\n", v.Name, v.Value)
+					// }
 					// create timeout context and pass to Resolver
 					ctx, cancel := context.WithTimeout(context.Background(), ResolverTimeoutMS*time.Millisecond)
 					defer cancel()
@@ -2087,7 +2132,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 					}
 					writeout(pathRoot, out, fieldName)
 					writeout(pathRoot, out, ":", noNewLine)
-					fmt.Printf("+++ sdlTypeAST %T %s\n", sdlFld, sdlFld.Name_)
+					//fmt.Printf("+++ sdlTypeAST %T %s\n", sdlFld, sdlFld.Name_)
 					//
 					switch r := responseItems.(type) {
 					case sdl.ObjectVals:
@@ -2099,7 +2144,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 							fmt.Println("XXXX", response)
 							if response.Name.EqualString(sdlFld.Name_.String()) { // name
 								resp = response.Value.InputValueProvider
-								fmt.Println("Found ", sdlFld.Name_.String())
+								//fmt.Println("Found ", sdlFld.Name_.String())
 								break
 							}
 						}
@@ -2123,26 +2168,26 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 									writeout(fieldPath, out, "[ ", noNewLine)
 									d++ // nesting depth of List_
 									if d > sdlFld.Type.Depth {
-										p.addErr(fmt.Sprintf(`Exceeds nesting of List type for "%s" %s`, qry.Name, qry.Name.AtPosition()))
+										addErr(fmt.Sprintf(`Exceeds nesting of List type for "%s" %s`, qry.Name, qry.Name.AtPosition()))
 									}
 									f(x, d)
 									writeout(fieldPath, out, "] ", noNewLine)
 									d--
 								} else {
 									if d < sdlFld.Type.Depth {
-										p.addErr(fmt.Sprintf(`Expect a nesting level of %d, got %d, for scalar values in List for "%s" %s`, sdlFld.Type.Depth, d, qry.Name, qry.Name.AtPosition()))
+										addErr(fmt.Sprintf(`Expect a nesting level of %d, got %d, for scalar values in List for "%s" %s`, sdlFld.Type.Depth, d, qry.Name, qry.Name.AtPosition()))
 									}
 									// optimise by performing loop here rather than use outer for loop
 									for i := 0; i < len(y); i++ {
 										// for scalar only Type.Name contains the scalar type name i.e. Int, Float, Boolean etc
 										if y[i].IsType().String() != sdlFld.Type.Name.String() {
 											if _, ok := y[i].InputValueProvider.(sdl.Null_); !ok {
-												p.addErr(fmt.Sprintf(`66 Expected "%s" got %s for "%s" %s`, sdlFld.Type.Name_.String(), y[i].IsType(), qry.Name, qry.Name.AtPosition()))
+												addErr(fmt.Sprintf(`66 Expected "%s" got %s for "%s" %s`, sdlFld.Type.Name_.String(), y[i].IsType(), qry.Name, qry.Name.AtPosition()))
 											} else {
 												var bit byte = 1
 												bit &= sdlFld.Type.Constraint >> uint(d)
 												if bit == 1 {
-													p.addErr(fmt.Sprintf(`Expected non-null got null for "%s" %s`, qry.Name, qry.Name.AtPosition()))
+													addErr(fmt.Sprintf(`Expected non-null got null for "%s" %s`, qry.Name, qry.Name.AtPosition()))
 												}
 											}
 										}
@@ -2189,7 +2234,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 				if d.Name_.String() == "@include" {
 					for _, arg := range d.Arguments {
 						if arg.Name.String() != "if" {
-							p.addErr(fmt.Sprintf(`Expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
+							addErr(fmt.Sprintf(`Expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
 							return
 						}
 						// parse wil have populated argument value with variable value.
@@ -2209,16 +2254,16 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 			//
 			respType, err := p.tyCache.FetchAST(sdl.NameValue_(responseType))
 			if err != nil {
-				p.addErr(err.Error())
+				addErr(err.Error())
 			}
 			if respType == nil {
-				p.addErr(fmt.Sprintf(`Response type "%s" not defined in Graphql repository"`, responseType))
+				addErr(fmt.Sprintf(`Response type "%s" not defined in Graphql repository"`, responseType))
 				return
 			}
 			respObj, ok := respType.(*sdl.Object_)
 			if !ok {
-				p.addErr(fmt.Sprintf(`Response type "%s" is not a Graphql Object`, responseType))
-				p.abort = true
+				addErr(fmt.Sprintf(`Response type "%s" is not a Graphql Object`, responseType), abort)
+				// p.abort = true // shared variable needs syncing
 				return
 			}
 			//
@@ -2226,10 +2271,10 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 			//
 			expType, err := p.tyCache.FetchAST(qry.FragStmt.TypeCond.Name)
 			if err != nil {
-				p.addErr(err.Error())
+				addErr(err.Error())
 			}
 			if expType == nil {
-				p.addErr(fmt.Sprintf(`Fragment type condition "%s" not found in cache`, qry.FragStmt.TypeCond.Name))
+				addErr(fmt.Sprintf(`Fragment type condition "%s" not found in cache`, qry.FragStmt.TypeCond.Name))
 			} else {
 				//
 				//Fragments cannot be specified on any input value (scalar, enumeration, or input object).
@@ -2241,7 +2286,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 					// check response Type name must match expected type name e.g. Person is the type name for a sdl.Object_
 					//
 					if responseType != x.TypeName().String() { //respObj.TypeName() != x.TypeName() {
-						fmt.Printf(`Response type "%s" does not match Fragment type "%s" %s`, responseType, x.TypeName(), "\n")
+						//fmt.Printf(`Response type "%s" does not match Fragment type "%s" %s`, responseType, x.TypeName(), "\n")
 						continue
 					}
 					//
@@ -2252,7 +2297,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 						if d.Name_.String() == "@include" {
 							for _, arg := range d.Arguments {
 								if arg.Name.String() != "if" {
-									p.addErr(fmt.Sprintf(`Expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
+									addErr(fmt.Sprintf(`Expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
 									return
 								}
 								// parse wil have populated argument value with variable value.
@@ -2281,8 +2326,8 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 						}
 					}
 					if !implements {
-						p.addErr(fmt.Sprintf(`Response type "%s" does not implement interface "%s"`, responseType, x.Name_))
-						p.abort = true
+						addErr(fmt.Sprintf(`Response type "%s" does not implement interface "%s"`, responseType, x.Name_), abort)
+						//p.abort = true
 						return
 					}
 					for _, d := range qry.FragStmt.Directives {
@@ -2290,7 +2335,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 						if d.Name_.String() == "@include" {
 							for _, arg := range d.Arguments {
 								if arg.Name.String() != "if" {
-									p.addErr(fmt.Sprintf(`Expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
+									addErr(fmt.Sprintf(`Expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
 									return
 								}
 								// parse wil have populated argument value with variable value.
@@ -2327,10 +2372,10 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 			//
 			//  Type condition should have been populated during parsing for both explicit ad implicit cases
 			//
-			fmt.Println("qry.TypeCond: ", qry.TypeCond)
+			//fmt.Println("qry.TypeCond: ", qry.TypeCond)
 			if !qry.TypeCond.Exists() && len(qry.Directives) == 0 {
-				p.addErr("type condition does not exist. Shoud have been popoulated during parsing.")
-				p.abort = true
+				addErr("type condition does not exist. Shoud have been popoulated during parsing.", abort)
+				//p.abort = true
 				return
 			}
 			//
@@ -2340,8 +2385,8 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 				var err error
 				qry.TypeCondAST, err = p.tyCache.FetchAST(qry.TypeCond.Name)
 				if err != nil {
-					p.addErr(err.Error())
-					p.abort = true
+					addErr(err.Error(), abort)
+					//p.abort = true
 					return
 				}
 			}
@@ -2358,18 +2403,18 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 			//
 			respAST, err := p.tyCache.FetchAST(sdl.NameValue_(responseType)) //TODO - eleminate this cache lookup by passing the responseAST rather than reesponseType
 			if err != nil {
-				p.addErr(err.Error())
+				addErr(err.Error())
 			}
 			if respAST == nil {
-				p.addErr(fmt.Sprintf(`Response type "%s" not defined in Graphql respository"`, responseType))
-				p.abort = true
+				addErr(fmt.Sprintf(`Response type "%s" not defined in Graphql respository"`, responseType))
+				//p.abort = true
 				return
 			}
 			//
 			respObj, ok := respAST.(*sdl.Object_)
 			if !ok {
-				p.addErr(fmt.Sprintf(`Response type "%s" is not a SDL Object`, responseType))
-				p.abort = true
+				addErr(fmt.Sprintf(`Response type "%s" is not a SDL Object`, responseType), abort)
+				//p.abort = true
 				return
 			}
 			//
@@ -2382,7 +2427,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 					//... @include(if: $expandedInfo) {
 					for _, arg := range v.Arguments {
 						if arg.Name.String() != "if" {
-							p.addErr(fmt.Sprintf(`include directive error, expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
+							addErr(fmt.Sprintf(`include directive error, expected argument name of "if", got %s %s`, arg.Name, arg.AtPosition()))
 							return
 						}
 						// parse wil have populated argument value with variable value.
@@ -2426,7 +2471,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 						}
 					}
 					if !found {
-						p.addErr(fmt.Sprintf(`Response type "%s" does not match any member in the Union type %s`, responseType, qry.TypeCondAST.TypeName()))
+						addErr(fmt.Sprintf(`Response type "%s" does not match any member in the Union type %s`, responseType, qry.TypeCondAST.TypeName()))
 						continue
 					}
 
@@ -2435,7 +2480,7 @@ func (p *Parser) executeStmt_(gqlsset []ast.SelectionSetProvider, pathRoot strin
 					// Spec: Selections within fragments only return values when concrete type of the object it is operating on matches the type of the fragment.
 					//
 					if responseType != qry.TypeCondAST.TypeName().String() {
-						fmt.Printf(`IGNORE inline Fragment as response type "%s" does not match inline fragment On condidtion "%s" %s`, responseType, qry.TypeCondAST.TypeName(), "\n")
+						//	fmt.Printf(`IGNORE inline Fragment as response type "%s" does not match inline fragment On condidtion "%s" %s`, responseType, qry.TypeCondAST.TypeName(), "\n")
 						continue
 					}
 				}
@@ -2613,7 +2658,7 @@ func (p *Parser) parseName(f ast.NameI, optional ...bool) *Parser { // type f *a
 	if p.curToken.Type == token.IDENT {
 
 		f.AssignName(p.curToken.Literal, p.Loc(), &p.perror)
-		p.nextToken() // read over name
+		p.nextToken("read over name") // read over name
 
 	} else if len(optional) == 0 {
 		p.addErr(fmt.Sprintf(`Expected name identifer got %s of %s`, p.curToken.Type, p.curToken.Literal))

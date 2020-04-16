@@ -635,7 +635,7 @@ func TestParseLeadingDoubleUnderscore(t *testing.T) {
 `
 	parseErrs := []string{
 		`identifer "__use_r" cannot start with two underscores at line: 2, column: 13`,
-		`Field "__use_r" is not a member of "Query" (SDL Object "Query") at line: 2 column: 13`,
+		`Field "__use_r" is not a member of "Query" at line: 2 column: 13`,
 	}
 
 	l := lexer.New(input)
@@ -656,7 +656,7 @@ func TestParseLeadingSingleUnderscore(t *testing.T) {
 `
 
 	var parseErrs []string = []string{
-		`Field "_use_r" is not a member of "Query" (SDL Object "Query") at line: 2 column: 13`,
+		`Field "_use_r" is not a member of "Query" at line: 2 column: 13`,
 	}
 
 	l := lexer.New(input)
@@ -850,21 +850,20 @@ func TestParseWrongVariableNameInArgument(t *testing.T) {
 	// Test
 	//
 	var input = `query getZuckProfile($devicePicSize: Int = 1234) {
-  xyzalias: user(id: $ePicSize) {
-    sex	
-    author
-  }
-}
+	  xyzalias: user(id: $ePicSize) {
+	    sex
+	    author
+	  }
+	}
 `
 	var parseErrs []string = []string{
-		`Variable, ePicSize not defined  at line: 2, column: 23`,
+		`Variable, ePicSize not defined  at line: 2, column: 24`,
 	}
 	schema := "DefaultDoc"
 	l := lexer.New(input)
 	p := New(l)
 
 	_, errs := p.ParseDocument(schema)
-	t.Log(errs)
 	//
 	checkErrors(errs, parseErrs, t)
 }
@@ -970,6 +969,7 @@ func TestParseUseOfCommas(t *testing.T) {
 			t.Logf("Expected: [%s] \n", trimWS(expectedDoc))
 			t.Errorf(`Unexpected document for %s. `, t.Name())
 		}
+		t.Log("doc.String(): " + doc.String())
 	}
 	//
 	// teardown

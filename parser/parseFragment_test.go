@@ -139,6 +139,7 @@ fragment comparisonFields on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -251,6 +252,7 @@ fragment comparisonFields on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -416,6 +418,7 @@ fragment comparisonFields on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -518,6 +521,7 @@ func TestFragmentAttributeRepeated(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -598,6 +602,7 @@ func TestFragmentInlineWithUnionEnclosingType(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -691,6 +696,7 @@ func TestFragmentResolveRetList(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -715,18 +721,18 @@ func TestFragmentResolveRetList(t *testing.T) {
 	}
 }
 
-func TestMultiStmt1(t *testing.T) {
+func TestMultiStmtConcurrent1(t *testing.T) {
 	{
 		//
 		// Setup
 		//
 		inputSDL := `
-		type Query { hero(episode: Episode): [Human] 
-					 droid(id: ID!): [Droid] 
+		type Query { hero(episode: Episode): [Human]
+					 droid(id: ID!): [Droid]
 					}
-		
+
 		enum Episode { NEWHOPE EMPIRE JEDI }
-	
+
 		interface Character {
 							id: ID!
 							name: String!
@@ -924,6 +930,7 @@ fragment comparisonFields on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -1092,6 +1099,7 @@ fragment comparisonFields on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -1174,21 +1182,24 @@ func TestFragmentWithInterfaceNotSupported(t *testing.T) {
 	  }
 	}
 
-fragment comparisonFields on Character {
+fragment comparisonFields on Human {
   name
   friends {
     name
   }
 }`
 
-	var execErrs []string = []string{
-		`Response type "Human" does not implement interface "Character" at line: 19, column: 1`,
+	var parseErrs []string = []string{
+		`Enclosing interface "Character" is not implemented in fragment "Human", at line: 3 column: 9`,
+		`Enclosing interface "Character" is not implemented in fragment "Human", at line: 6 column: 9`,
+		`Enclosing interface "Character" is not implemented in fragment "Human", at line: 10 column: 9`,
 	}
-	var parseErrs []string
+	var execErrs []string
 	var expectedResult string
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -1316,6 +1327,7 @@ fragment comparisonFields on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -1432,6 +1444,7 @@ fragment comparisonFields on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 	//	p.ClearCache()
 	p.SetDocument("DefaultDoc")
 	_, errs := p.ParseDocument()
@@ -1581,6 +1594,7 @@ fragment comparisonFields2 on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -1712,6 +1726,7 @@ fragment comparisonFields on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -1785,6 +1800,7 @@ fragment comparisonFields on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -1860,6 +1876,7 @@ fragment comparisonFields on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -1978,6 +1995,7 @@ fragment comparisonCharacter on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -2082,6 +2100,7 @@ fragment comparisonCharacter on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -2089,6 +2108,7 @@ fragment comparisonCharacter on Character {
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
 	checkErrors(errs, parseErrs, t)
+	t.Log("Errors: ", errs)
 	if len(errs) == 0 {
 		t.Log(d.String())
 
@@ -2199,6 +2219,7 @@ fragment comparisonCharacter on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -2277,6 +2298,7 @@ func TestInlineFragmentTypeCondInterface(t *testing.T) {
 	var expectedResult string
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -2314,7 +2336,8 @@ func TestInlineFragmentTypeCondInterface(t *testing.T) {
 							appearsIn: [Episode]!
 							primaryFunction: String
 							}
-		`
+	directive @include (arg1: Int = 34 arg2: Float ) on FIELD | INLINE_FRAGMENT 
+	`
 	teardown(inputSDL, t)
 }
 
@@ -2325,11 +2348,11 @@ func TestInlineFragmentDirectivesFALSE(t *testing.T) {
 	{
 		inputSDL := `
 		type Query { hero(episode: Episode):  [Character] # TODO: create test for Character (no List)
-					 droid(id: ID!): [Droid] 
+					 droid(id: ID!): [Droid]
 					}
-		
+
 		enum Episode { NEWHOPE EMPIRE JEDI }
-	
+		directive @include  (  if : Boolean  = false  ) on | INLINE_FRAGMENT| FIELD|FRAGMENT_SPREAD
 		interface Character {
 							id: ID!
 							name: String!
@@ -2420,12 +2443,12 @@ fragment comparisonFields on Character {				# fragment stmt no directives
 	}  ]
 	rightComparison : [
 	{
-	MyName : "Leia Organa"
 	}  ]
 	] }`
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	_, errs := p.ParseDocument()
@@ -2521,6 +2544,7 @@ fragment comparisonFields on Character {				# fragment stmt no directives
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	_, errs := p.ParseDocument()
@@ -2672,6 +2696,7 @@ fragment comparisonFields on Character {				# fragment stmt no directives
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	_, errs := p.ParseDocument()
@@ -2802,6 +2827,7 @@ fragment comparisonFields on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -2851,6 +2877,7 @@ fragment comparisonFields on Character {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -2925,6 +2952,7 @@ fragment comparisonFields on Character {
 	}
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/hero", client.ResolverHero); err != nil {
 		p.addErr(err.Error())
@@ -2987,7 +3015,7 @@ func TestUnionTypeWithFieldErr(t *testing.T) {
    name 
     ... on Person {    
 			 name
-			 age
+			 age (ScaleBy:1.3)
     }
     ... on Photo {
           width
@@ -3011,6 +3039,7 @@ func TestUnionTypeWithFieldErr(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("SearchQuery/firstSearchResult", client.ResolverHeroUnion); err != nil {
 		p.addErr(err.Error())
@@ -3050,7 +3079,7 @@ func TestUnionType(t *testing.T) {
 		
 		union SearchResult =| Photo| Person 
 		
-		type Person {name : String! age  (  ScaleBy : Float   ) : Int! }`
+		type Person {name : String! age  (  ScaleBy : Float =3.4  ) : Int! }`
 
 		setup(inputSDL, t)
 	}
@@ -3083,6 +3112,7 @@ func TestUnionType(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("SearchQuery/firstSearchResult", client.ResolverHeroUnion); err != nil {
 		p.addErr(err.Error())
@@ -3167,6 +3197,7 @@ func TestFragmentRootInterface(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
@@ -3241,6 +3272,7 @@ func TestFragmentRootInterfaceErr1(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
@@ -3326,6 +3358,7 @@ func TestRootInterfaceWithFragmentNotImplemented(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
@@ -3411,6 +3444,7 @@ func TestRootInterfaceWithFragmentIsImplementedFieldErr(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
@@ -3495,6 +3529,7 @@ func TestRootInterfaceWithFragmentIsImplementedInlineErr(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
@@ -3577,6 +3612,7 @@ func TestRootInterfaceWithFragmentIsImplementedDupFields(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
@@ -3656,6 +3692,7 @@ func TestRootInterfaceWithOnlineFragmentDupFields(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
@@ -3721,6 +3758,7 @@ func TestRootInterfaceWithOnlineFragNotImplement(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
@@ -3797,6 +3835,7 @@ func TestRootInterfaceWithOnlineXX(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
@@ -3884,6 +3923,7 @@ func TestFragementDirectivesNotExist(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()
@@ -3955,6 +3995,7 @@ func TestFragementDirectiveExist(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	p.SetDocument("DefaultDoc")
 	d, errs := p.ParseDocument()

@@ -78,9 +78,9 @@ func TestQueryArgumentValue(t *testing.T) {
 				}
 		type Person {
 					name : String! 
-					age  (  ScaleBy : Float   ) : [[Int!]]! 
+					age  (  ScaleBy : Float  =3.2 ) : [[Int!]]! 
 					other : [String!] 
-					posts  (  resp : [Int!]   ) : [Post!] 
+					posts  (  resp : [Int!]  = [12 213 22] ) : [Post!] 
 		}
 		type Query {allPersons  (  last : Int     first : [[String!]]   ) : [Person!] }
 		`
@@ -111,6 +111,7 @@ func TestQueryArgumentValue(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	if err := p.Resolver.Register("Query/allPersons", client.ResolverAll); err != nil {
 		p.addErr(err.Error())
@@ -140,8 +141,8 @@ func TestQuerySingleResolverLast2a(t *testing.T) {
 				mutation : Mutation
 				subscription : Subscription
 				}
-				type Person {name : String! age  (  ScaleBy : Float   ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]   ) : [Post!] }
-				type Query {allPersons  (  last : Int     first : Int   ) : [Person!] }`
+				type Person {name : String! age  (  ScaleBy : Float =1.19  ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]  = [1 2 3] ) : [Post!] }
+				type Query {allPersons  (  last : Int     first : Int = 2  ) : [Person!] }`
 		setup(inputSDL, t)
 	}
 
@@ -164,6 +165,7 @@ func TestQuerySingleResolverLast2a(t *testing.T) {
 	     }
 	}
 `
+	//queryXYZ3{allPersons(last:2first:2){nameage(ScaleBy:1.3)WhatAmIReading:posts(resp:[123]){titleauthor{nameage(ScaleBy:1.2)}}}}
 	expectedResult := `
 	{
 	 data: {
@@ -231,25 +233,24 @@ func TestQuerySingleResolverLast2a(t *testing.T) {
 
 	var expectedErr []string
 
-	var expectedDoc string = `
-	query XYZ3 {
-	     allPersons(last: 2 ) {
-	         name 
-	         age
-	         WhatAmIReading: posts {
-	         	title
-	         	author {
-	         		name
-	         		age
-	         	}
-	         }
-	     }
-	}
+	var expectedDoc string = `query XYZ3 {
+	 allPersons(last:2first:2) {
+		name
+		age(ScaleBy:1.19)
+		WhatAmIReading : posts(resp:[123]) { 
+											 title
+											 author { 
+		    										name
+		    										age(ScaleBy:1.19)
+													}
+											}
+								}
+		}
 	`
 	schema := "DefaultDoc"
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
+	p.ClearCache()
 	//
 	// register resolvers - this would normally be populated by the client and resolverMap passed to server
 	//
@@ -265,6 +266,7 @@ func TestQuerySingleResolverLast2a(t *testing.T) {
 			t.Logf("Expected: [%s] \n", trimWS(expectedDoc))
 			t.Errorf(`Unexpected document for %s. `, t.Name())
 		}
+		t.Log(doc.String())
 	}
 	//
 	if len(errs) == 0 {
@@ -296,13 +298,14 @@ func TestQuerySingleResolverLast2b(t *testing.T) {
 	//
 	{
 
-		inputSDL := `
-				schema {
+		inputSDL := `schema {
 				query : Query 
 				mutation : Mutation
 				subscription : Subscription
 				}
-				type Query {allPersons  (  last : Int     first : Int   ) : [Person!] }`
+				type Person {name : String! age  (  ScaleBy : Float =1.3  ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]  = [1 2 3] ) : [Post!] }
+				type Query {allPersons  (  last : Int     first : Int = 2  ) : [Person!] }
+				`
 		setup(inputSDL, t)
 	}
 
@@ -376,11 +379,11 @@ func TestQuerySingleResolverLast2b(t *testing.T) {
 	}`
 
 	var expectedErr []string
-
+	var expectedDoc = `query{allPersons(last:2first:2){nameage(ScaleBy:1.3)WhatAmIReading:posts(resp:[123]){author{name}}}}`
 	schema := "DefaultDoc"
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
+	p.ClearCache()
 	//
 	// register resolvers - this would normally be populated by the client and resolverMap passed to server
 	//
@@ -391,9 +394,9 @@ func TestQuerySingleResolverLast2b(t *testing.T) {
 	//
 	checkErrors(errs, expectedErr, t)
 	if len(errs) == 0 {
-		if compare(doc.String(), input) {
-			t.Logf("Got:      [%s] \n", trimWS(doc.String()))
-			t.Logf("Expected: [%s] \n", trimWS(input))
+		if compare(expectedDoc, doc.String()) {
+			t.Logf("Got:      [%s] \n", trimWS(expectedDoc))
+			t.Logf("Expected: [%s] \n", trimWS(doc.String()))
 			t.Errorf(`Unexpected document for %s. `, t.Name())
 		}
 	}
@@ -412,21 +415,6 @@ func TestQuerySingleResolverLast2b(t *testing.T) {
 		}
 		t.Log(result)
 	}
-	//
-	// Teardown
-	//
-	{
-		inputSDL := `
-				schema {
-				query : Query 
-				mutation : Mutation
-				subscription : Subscription
-				}
-				
-				type Person {name : String! age  (  ScaleBy : Float   ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]   ) : [Post!] }
-				type Query {allPersons(last : Int  first : [[String!]] ) : [Person!]}`
-		teardown(inputSDL, t)
-	}
 }
 
 func TestQuerySingleResolverLast1(t *testing.T) {
@@ -435,7 +423,14 @@ func TestQuerySingleResolverLast1(t *testing.T) {
 	//
 	{
 
-		inputSDL := `type Query {allPersons  (  last : Int     first : Int   ) : [Person!] }`
+		inputSDL := `schema {
+				query : Query 
+				mutation : Mutation
+				subscription : Subscription
+				}
+				type Person {name : String! age  (  ScaleBy : Float =1.3  ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]  = [1 2 3] ) : [Post!] }
+				type Query {allPersons  (  last : Int     first : Int = 2  ) : [Person!] }
+				`
 		setup(inputSDL, t)
 	}
 
@@ -485,11 +480,11 @@ func TestQuerySingleResolverLast1(t *testing.T) {
 	}`
 
 	var expectedErr []string
-
+	var expectedDoc string = `query{allPersons(last:1first:2){nameage(ScaleBy:1.3)WhatAmIReading:posts(resp:[123]){author{name}}}}`
 	schema := "DefaultDoc"
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
+	p.ClearCache()
 	//
 	// register resolvers - this would normally be populated by the client and resolverMap passed to server
 	//
@@ -500,9 +495,9 @@ func TestQuerySingleResolverLast1(t *testing.T) {
 	//
 	checkErrors(errs, expectedErr, t)
 	if len(errs) == 0 {
-		if compare(doc.String(), input) {
+		if compare(doc.String(), expectedDoc) {
 			t.Logf("Got:      [%s] \n", trimWS(doc.String()))
-			t.Logf("Expected: [%s] \n", trimWS(input))
+			t.Logf("Expected: [%s] \n", trimWS(expectedDoc))
 			t.Errorf(`Unexpected document for %s. `, t.Name())
 		}
 	}
@@ -542,8 +537,8 @@ func TestQueryTwoResolver_43(t *testing.T) {
 				mutation : Mutation
 				subscription : Subscription
 				}
-				
-				type Person {name : String! age  (  ScaleBy : Float   ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]   ) : [Post!] }
+				type Post {title : String! title2 : String! author : [Person!]! }
+				type Person {name : String! age  (  ScaleBy : Float =3.2  ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]  = [1 2 3] ) : [Post!] }
 				type Query {allPersons  (  last : Int     first : Int   ) : [Person!] }`
 		setup(inputSDL, t)
 	}
@@ -552,7 +547,7 @@ func TestQueryTwoResolver_43(t *testing.T) {
 	//
 	var input = `
 	query XYZ {
-	     allPersons(last: 2 ) {
+	     allPersons(first : 3 last: 2 ) {
 	         name 
 	         age
 	         WhatAmIReading: posts { 
@@ -635,7 +630,7 @@ func TestQueryTwoResolver_43(t *testing.T) {
 	schema := "DefaultDoc"
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
+	p.ClearCache()
 	//
 	if err := p.Resolver.Register("Query/allPersons", client.ResolvePartial); err != nil {
 		p.addErr(err.Error())
@@ -678,8 +673,8 @@ func TestQueryTwinResolverX(t *testing.T) {
 				mutation : Mutation
 				subscription : Subscription
 				}
-				type Query {allPersons  (  last : Int     first : Int   ) : Person! }
-				type Person {name : String! age  (  ScaleBy : Float   ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]   ) : [Post!] }`
+				type Query {allPersons  (  last : Int     first : Int =2  ) : Person! }
+				type Person {name : String! age  (  ScaleBy : Float   ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]  = [2 3 4] ) : [Post!] }`
 		setup(inputSDL, t)
 	}
 	//
@@ -707,7 +702,7 @@ func TestQueryTwinResolverX(t *testing.T) {
 	schema := "DefaultDoc"
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
+	p.ClearCache()
 	//
 	if err := p.Resolver.Register("Query/allPersons", client.ResolvePartial); err != nil {
 		p.addErr(err.Error())
@@ -744,7 +739,9 @@ func TestQueryFieldCheckWithWrongName(t *testing.T) {
 	// Setup
 	//
 	{
-		inputSDL := `type Query {allPersons(last : Int  first : [[String!]] ) : [Person!]}`
+		inputSDL := `
+						type Query {allPersons  (  last : Int =3    first : Int =2  ) : Person! }
+				type Person {name : String! age  (  ScaleBy : Float =33.3  ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]  = [2 3 4] ) : [Post!] }`
 		setup(inputSDL, t)
 	}
 
@@ -766,7 +763,7 @@ func TestQueryFieldCheckWithWrongName(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
+	p.ClearCache()
 	_, errs := p.ParseDocument()
 	checkErrors(errs, expectedErr, t)
 }
@@ -778,9 +775,9 @@ func TestQueryFieldCheckWithInlineFragmentNoDirective_44(t *testing.T) {
 	//
 	{
 		inputSDL := `
-		type Query {allPersons(last : Int  first : Float ) : [Person!]}
+		type Query {allPersons(last : Int = 1 first : Float = 3.2) : [Person!]}
 		
-		type Person {name : String! age(ScaleBy : Float ) : [[Int!]]! other : [String!] posts(resp :  Int! ) : [Post!]}
+		type Person {name : String! age(ScaleBy : Float = 3.2) : [[Int!]]! other : [String!] posts(resp :  Int! = 3) : [Post!]}
 		
 		type Post {title : String! title2 : String! author : [Person!]!}`
 		setup(inputSDL, t)
@@ -812,7 +809,7 @@ func TestQueryFieldCheckWithInlineFragmentNoDirective_44(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
+	p.ClearCache()
 	_, errs := p.ParseDocument()
 	checkErrors(errs, expectedErr, t)
 	// if len(errs) == 0 {
@@ -836,22 +833,22 @@ func TestQueryCoerceInt2ListDepth1_45(t *testing.T) {
 	// Setup
 	//
 	{
-		inputSDL := `	type Query {allPersons(last : [Int]  first : [[String!]] ) : [Person!]}`
+		inputSDL := `	type Query {allPersons(last : Int = 1  first : Int = 3 ) : [Person!]}`
 		setup(inputSDL, t)
 	}
 	//
 	// Test
 	//
 	var input = `
-	query XYZ ($expandedInfo: Boolean = false) {
+	query XYZ {
 	     allPersons(last: 2) {
 	         name 
 	     }
 	}
 `
 	var expectedDoc string = `
-		query XYZ ($expandedInfo: Boolean = false) {
-		     allPersons(last: [2]) {
+		query XYZ {
+		     allPersons(last:2 first:3)  {
 		         name
 		     }
 		}
@@ -860,6 +857,7 @@ func TestQueryCoerceInt2ListDepth1_45(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	doc, errs := p.ParseDocument()
 
@@ -870,12 +868,13 @@ func TestQueryCoerceInt2ListDepth1_45(t *testing.T) {
 			t.Logf("Expected: [%s] \n", trimWS(expectedDoc))
 			t.Errorf(`Unexpected document for %s. `, t.Name())
 		}
+		t.Log(doc.String())
 	}
 	//
 	// TearDown
 	//
 	{
-		inputSDL := `	type Query {allPersons(last : Int  first : Int) : [Person!]}`
+		inputSDL := `	type Query {allPersons(last : Int = 1  first : Int = 3 ) : [Person!]}`
 		teardown(inputSDL, t)
 	}
 }
@@ -885,7 +884,7 @@ func TestQueryCoerceInt2ListDepth2_46(t *testing.T) {
 	// Setup
 	//
 	{
-		inputSDL := `	type Query {allPersons(last : [[Int]]  first : [[String!]] ) : [Person!]}`
+		inputSDL := `	type Query {allPersons(last : Int = 1 first : Int = 3 ) : [Person!]}`
 		setup(inputSDL, t)
 	}
 
@@ -898,7 +897,7 @@ func TestQueryCoerceInt2ListDepth2_46(t *testing.T) {
 `
 	var expectedDoc string = `
 		query XYZ ($expandedInfo: Boolean = false) {
-		     allPersons(last: [[2]]) {
+		     allPersons(last: 2 first :3) {
 		         name
 		     }
 		}
@@ -907,6 +906,7 @@ func TestQueryCoerceInt2ListDepth2_46(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 	if err := p.Resolver.Register("Query/allPersons", client.ResolverAll); err != nil {
 		p.addErr(err.Error())
 	}
@@ -921,13 +921,6 @@ func TestQueryCoerceInt2ListDepth2_46(t *testing.T) {
 			t.Errorf(`Unexpected document for %s. `, t.Name())
 		}
 	}
-	//
-	// Teardown
-	//
-	{
-		inputSDL := `type Query {allPersons(last : Int  first : [[String!]] ) : [Person!]}`
-		teardown(inputSDL, t)
-	}
 
 }
 
@@ -936,7 +929,7 @@ func TestQueryCoerceInt2ListDepth3_47(t *testing.T) {
 	// Setup
 	//
 	{
-		inputSDL := `	type Query {allPersons(last : [[[String!]]]  first : [[String!]] ) : [Person!]}`
+		inputSDL := `	type Query {allPersons(last : Int = 1 first : Int = 3 ) : [Person!]}`
 		setup(inputSDL, t)
 	}
 	//
@@ -944,14 +937,14 @@ func TestQueryCoerceInt2ListDepth3_47(t *testing.T) {
 	//
 	var input string = `
 	query XYZ ($expandedInfo: Boolean = false) {
-	     allPersons(last: "ABC") {
+	     allPersons(last: 3) {
 	         name 
 	     }
 	}
 `
 	var expectedDoc string = `
 		query XYZ ($expandedInfo: Boolean = false) {
-		     allPersons(last: [[["ABC"]]]) {
+		     allPersons(last: 3 first: 3) {
 		         name
 		     }
 		}
@@ -960,6 +953,7 @@ func TestQueryCoerceInt2ListDepth3_47(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	//p.ClearCache()
 	doc, errs := p.ParseDocument()
@@ -987,7 +981,7 @@ func TestQueryCoerceDiffTypeListDepth3_48(t *testing.T) {
 	// Setup
 	//
 	{
-		inputSDL := `	type Query {allPersons(last : [[[String!]]]  first : [[String!]] ) : [Person!]}`
+		inputSDL := `	type Query {allPersons(last : String first : Int = 4 ) : [Person!]}`
 		setup(inputSDL, t)
 	}
 	//
@@ -995,17 +989,18 @@ func TestQueryCoerceDiffTypeListDepth3_48(t *testing.T) {
 	//
 	var input string = `
 	query XYZ ($expandedInfo: Boolean = false) {
-	     allPersons(last: 4.4 ) {
+	     allPersons(last: 12.2 ) {
 	         name 
 	     }
 	}
 `
 	var expectedErr []string = []string{
-		`Required type "String", got "Float" at line: 3 column: 24`,
+		`Required type for argument "last" is String, got Float at line: 3 column: 18`,
 	}
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	_, errs := p.ParseDocument()
 	checkErrors(errs, expectedErr, t)
@@ -1032,7 +1027,7 @@ func TestQueryDiffTypeListDepth3_49(t *testing.T) {
 
 	var input string = `
 	query XYZ ($expandedInfo: Boolean = false) {
-	     allPersons(last: [[[4.4]]] ) {
+	     allPersons(last: [[[4.4]]] first : [["ABC"]]) {
 	         name 
 	     }
 	}
@@ -1043,6 +1038,7 @@ func TestQueryDiffTypeListDepth3_49(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 
 	_, errs := p.ParseDocument()
 	checkErrors(errs, expectedErr, t)
@@ -1085,22 +1081,29 @@ func TestQueryInvalidArguments_45(t *testing.T) {
 	}
 `
 	expectedErr := []string{
-		`Field "address" is not a member of "posts" (SDL Object "Post") at line: 11 column: 14`,
-		`Field argument "author" is not defined in type "Person", at line: 6 column: 19`,
-		`Field argument "name" is not defined in type "Post", at line: 7 column: 21`,
-		`Field argument "age" is not defined in type "Post", at line: 7 column: 33`,
+		`Argument "first" must be defined (type "[[String!]]") at line: 2 column: 7`,
+		`Argument "ScaleBy" must be defined (type "Float") at line: 4 column: 11`,
+		`Enclosing type for an inline fragment field must be an Interface or Union if type on-condition specified or Object type if none. Got "Object" at line: 5 column: 13`,
 	}
 
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
+	p.ClearCache()
+
 	_, errs := p.ParseDocument()
 	checkErrors(errs, expectedErr, t)
 
 }
 
 func TestQueryFieldCheckWithFragmentSpreadDirective(t *testing.T) {
-
+	{
+		//
+		// Setup for 44
+		//
+		inputSDL := `type Person {name : String! age  (  ScaleBy : Float ) : [[Int!]]! other : [String!] posts  (  resp : [Int!]  ) : [Post!] }
+					type Query {allPersons(last : [Int]  first : [[String!]] ) : [Person!]}`
+		setup(inputSDL, t)
+	}
 	var input = `query XYZ ($expandedInfo: Boolean = true) {
 	     allPersons(last: 2) {
 	         name 
@@ -1118,11 +1121,17 @@ func TestQueryFieldCheckWithFragmentSpreadDirective(t *testing.T) {
 	}
 `
 
-	expectedErr := []string{`Field "address" is not a member of "posts" (SDL Object "Post") at line: 11 column: 14`}
+	expectedErr := []string{
+		`Field "address" is not a member of "posts" (SDL Object "Post") at line: 11 column: 14`,
+		`Argument "first" must be defined (type "[[String!]]") at line: 2 column: 7`,
+		`Argument "ScaleBy" must be defined (type "Float") at line: 5 column: 12`,
+		`Argument "resp" must be defined (type "[Int!]") at line: 6 column: 12`,
+		`Argument "ScaleBy" must be defined (type "Float") at line: 9 column: 14`,
+	}
 
 	l := lexer.New(input)
 	p := New(l)
-	//	p.ClearCache()
+	p.ClearCache()
 	_, errs := p.ParseDocument()
 	checkErrors(errs, expectedErr, t)
 
@@ -1138,15 +1147,15 @@ func TestQueryWithFragmentSpreadDirectiveFALSE(t *testing.T) {
 	}
 
 	var input = `query XYZ ($expandedInfo: Boolean = false) {
-	     allPersons(last: 2) {
+	     allPersons(first: 3 last: 2) {
 	         aliasN: name 
 	         ... @include(if: $expandedInfo) {
-	         	age
-	         	posts {
+	         	age (ScaleBy : 1.2)
+	         	posts (resp: [ 12 32]){
 	         	 title
 	         	 author {
 	         	 	name
-	         	 	age
+	         	 	age(ScaleBy : 1.2)
 	         	 }
 	         	}
 	         }
@@ -1170,6 +1179,7 @@ func TestQueryWithFragmentSpreadDirectiveFALSE(t *testing.T) {
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 	//
 	// assign Resolver
 	//
@@ -1202,8 +1212,8 @@ func TestQueryInlineFragmentWithSameAttributeTrue(t *testing.T) {
 	// Setup
 	//
 	{
-		inputSDL := `type Query {allPersons(last : Int  first : [[String!]] ) : [Person!]}
-		type Person {name : String! age(ScaleBy : Float ) : [[Int!]]! other : [String!] posts(resp :  Int! ) : [Post!]}
+		inputSDL := `type Query {allPersons(last : Int = 2 first : Int = 5 ) : [Person!]}
+		type Person {name : String! age(ScaleBy : Float =2.3) : [[Int!]]! other : [String!] posts(resp :  Int! ) : [Post!]}
 		type Post {title : String! title2 : String! author : [Person!]!}`
 		setup(inputSDL, t)
 	}
@@ -1215,7 +1225,7 @@ func TestQueryInlineFragmentWithSameAttributeTrue(t *testing.T) {
 		         aliasN: name
 		         ... @include(if: $expandedInfo) {
 		         	age
-		         	posts {
+		         	posts (resp: 3){
 		         	 title
 		         	 author {
 		         	 	name
@@ -1229,13 +1239,14 @@ func TestQueryInlineFragmentWithSameAttributeTrue(t *testing.T) {
 	`
 
 	var expectedErr []string = []string{
-		`Field "Person.Query/allPersons/Person/age" has already been specified at line: 14 column: 12`,
+		`Field "Person.Query/allPersons/age" has already been specified at line: 14 column: 12`,
 	}
 
 	expectedResult := ``
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 	//
 	// assign Resolver
 	//
@@ -1283,12 +1294,14 @@ func TestQueryInlineFragmentWithSameAttributeFALSE(t *testing.T) {
 
 	var expectedErr []string = []string{
 		`Field "Person.Query/allPersons/age" has already been specified at line: 14 column: 12`,
+		`Argument "resp" must be defined (type "Int!") at line: 6 column: 13`,
 	}
 
 	expectedResult := ``
 
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 	//
 	// assign Resolver
 	//
@@ -1322,7 +1335,7 @@ func TestQueryWithFragmentSpreadDirectiveTRUE(t *testing.T) {
 		         aliasN: name
 		         ... @include(if: $expandedInfo) {
 		         	age
-		         	posts {
+		         	posts (resp: 34){
 		         	 title
 		         	 author {
 		         	 	name
@@ -1401,6 +1414,7 @@ func TestQueryWithFragmentSpreadDirectiveTRUE(t *testing.T) {
         }`
 	l := lexer.New(input)
 	p := New(l)
+	p.ClearCache()
 	//
 	// assign Resolver
 	//
