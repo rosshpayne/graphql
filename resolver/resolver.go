@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	sdl "github.com/graphql/internal/graph-sdl/ast"
+	sdl "github.com/graph-sdl/ast"
 )
 
 type fieldResolver interface {

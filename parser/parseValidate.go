@@ -3,7 +3,7 @@ package parser
 import (
 	"fmt"
 
-	sdl "github.com/graphql/internal/graph-sdl/ast"
+	sdl "github.com/graph-sdl/ast"
 )
 
 func (p *Parser) validateArguments(qArguments *[]*sdl.ArgumentT, argDefs sdl.InputValueDefs, item sdl.Name_, root sdl.GQLTypeProvider) {
