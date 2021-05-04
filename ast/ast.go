@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	sdl "github.com/graph-sdl/ast"
-	pse "github.com/graph-sdl/parser"
+	sdl "github.com/rosshpayne/graph-sdl/ast"
+	pse "github.com/rosshpayne/graph-sdl/parser"
 )
 
 type UnresolvedMap sdl.UnresolvedMap //¬333map[Name_]*sdl.GQLtype

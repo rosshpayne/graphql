@@ -11,14 +11,14 @@ import (
 	"sync"
 	"time"
 
-	sdl "github.com/graph-sdl/ast"
-	"github.com/graph-sdl/db"
-	lex "github.com/graph-sdl/lexer"
-	pse "github.com/graph-sdl/parser"
-	"github.com/graphql/ast"
-	"github.com/graphql/lexer"
-	"github.com/graphql/resolver"
-	"github.com/graphql/token"
+	sdl "github.com/rosshpayne/graph-sdl/ast"
+	"github.com/rosshpayne/graph-sdl/db"
+	lex "github.com/rosshpayne/graph-sdl/lexer"
+	pse "github.com/rosshpayne/graph-sdl/parser"
+	"github.com/rosshpayne/graphql/ast"
+	"github.com/rosshpayne/graphql/lexer"
+	"github.com/rosshpayne/graphql/resolver"
+	"github.com/rosshpayne/graphql/token"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/graphql/token"
+	"github.com/rosshpayne/graphql/token"
 )
 
 // Lexer parses an Input string (embedded in token pkg) and returns it as tokens - defined in token package.

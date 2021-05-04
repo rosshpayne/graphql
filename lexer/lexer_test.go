@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/graphql/token"
+	"github.com/rosshpayne/graphql/token"
 )
 
 func TestNextToken(t *testing.T) {

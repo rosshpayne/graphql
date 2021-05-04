@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/graphql/lexer"
+	"github.com/rosshpayne/graphql/lexer"
 )
 
 func TestValidateArgs(t *testing.T) {

@@ -3,11 +3,11 @@ package parser
 import (
 	"testing"
 
-	//	db "github.com/graph-sdl/db"
-	lsdl "github.com/graph-sdl/lexer"
-	psdl "github.com/graph-sdl/parser"
-	"github.com/graphql/client"
-	"github.com/graphql/lexer"
+	//	db "github.com/rosshpayne/graph-sdl/db"
+	lsdl "github.com/rosshpayne/graph-sdl/lexer"
+	psdl "github.com/rosshpayne/graph-sdl/parser"
+	"github.com/rosshpayne/graphql/client"
+	"github.com/rosshpayne/graphql/lexer"
 )
 
 func setup(inputSDL string, t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 
-	sdl "github.com/graph-sdl/ast"
+	sdl "github.com/rosshpayne/graph-sdl/ast"
 )
 
 const (

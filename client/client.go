@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	sdl "github.com/graph-sdl/ast"
+	sdl "github.com/rosshpayne/graph-sdl/ast"
 )
 
 type Person struct {

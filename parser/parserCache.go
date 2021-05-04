@@ -3,7 +3,7 @@ package parser
 import (
 	"fmt"
 
-	"github.com/graphql/ast"
+	"github.com/rosshpayne/graphql/ast"
 )
 
 // for fragment  & operatinal statments
