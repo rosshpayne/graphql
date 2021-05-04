@@ -3,8 +3,8 @@ package parser
 import (
 	"testing"
 
-	"github.com/graph-sdl/db"
 	"github.com/graphql/client"
+	"github.com/graphql/internal/graph-sdl/db"
 	"github.com/graphql/lexer"
 )
 
