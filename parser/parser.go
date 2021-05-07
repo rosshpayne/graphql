@@ -12,7 +12,7 @@ import (
 	"time"
 
 	sdl "github.com/rosshpayne/graph-sdl/ast"
-	"github.com/rosshpayne/graph-sdl/db"
+	db "github.com/rosshpayne/graph-sdl/document"
 	lex "github.com/rosshpayne/graph-sdl/lexer"
 	pse "github.com/rosshpayne/graph-sdl/parser"
 	"github.com/rosshpayne/graphql/ast"
@@ -1172,7 +1172,6 @@ func (p *Parser) executeStmt(stmt_ *ast.Statement) string {
 	// combine stmt outputs
 	//
 	var ts strings.Builder
-	fmt.Println("==== output ====== ")
 	if len(stmt.SelectionSet) > 1 {
 		ts.WriteString(" { data : [ ")
 	} else {

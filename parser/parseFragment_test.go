@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/rosshpayne/graph-sdl/db"
+	doc "github.com/rosshpayne/graph-sdl/document"
 	"github.com/rosshpayne/graphql/client"
 	"github.com/rosshpayne/graphql/lexer"
 )
@@ -161,12 +161,12 @@ fragment comparisonFields on Character {
 				t.Errorf("Expected: [%s] \n", trimWS(expectedResult))
 				t.Errorf(`Unexpected: JSON output wrong. `)
 			}
-			t.Log(result)
 			t.Log(d.String())
 		} else {
 			t.Log(errs)
 		}
 	}
+
 }
 
 //TODO: create a test for "... {" inline fragment using an object (?) enclosing type
@@ -3381,9 +3381,9 @@ func TestRootInterfaceWithFragmentIsImplementedFieldErr(t *testing.T) {
 				query : Query 
 				mutation : Mutation
 				subscription : Subscription
+		type Query {item : Contact}
 				}
 		
-		type Query {item : Contact}
 		
 		interface NamedEntity {
 					name: String
@@ -3883,11 +3883,11 @@ func TestFragementDirectivesNotExist(t *testing.T) {
 `
 		setup(inputSDL, t)
 
-		err := db.DeleteType("IncludeX")
+		err := doc.DeleteType("IncludeX")
 		if err != nil {
 			t.Errorf(`Not expected Error =[%q]`, err.Error())
 		}
-		err = db.DeleteType("IncludeY")
+		err = doc.DeleteType("IncludeY")
 		if err != nil {
 			t.Errorf(`Not expected Error =[%q]`, err.Error())
 		}
