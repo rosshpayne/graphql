@@ -1,5 +1,5 @@
 # graphql
-GraphQL server - supports Query operation only
+GraphQL server - supports Query operation only.  Queries with multiple statements has each statement executed concurrently.
 
 # Testing
 > cd parser
