@@ -3,5 +3,5 @@ GraphQL server - supports Query operation only.  Queries with multiple statement
 
 # Testing
 cd parser
-go test  -v > test.all.log &
+go test  -v \> test.all.log &
 tail -10f test.all.log
